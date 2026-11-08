@@ -1,0 +1,26 @@
+# secrets
+.env
+.env.*
+*.env
+.secrets/
+supabase/.temp/
+supabase/.branches/
+# exports from tools/db.mjs (personal data)
+mi-coach-export-*.json
+# deps / OS
+node_modules/
+.DS_Store
+Thumbs.db
+# personal health data (loaded with: node tools/db.mjs seed-private)
+tools/seed-private.json
+tools/baseline-*.json
+tools/inventario-gym.md
+tools/comida-seed.md
+package-lock.json
+# local visual harness (stub backend + real data export)
+tools/preview.html
+tools/preview-data.json
+tools/make-preview.mjs
+tools/preview-data.min.json
+tools/preview-private.min.json
+tools/SPEC-luis.md

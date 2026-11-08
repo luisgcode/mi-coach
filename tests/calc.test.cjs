@@ -1,0 +1,25 @@
+const C = require('../calc.js');
+const R = C.DEFAULT_RULES;
+console.log('strength 4x10@20kg', C.strengthKcal([{reps:10,kg:20},{reps:10,kg:20},{reps:10,kg:20},{reps:10,kg:20}], 80, R));
+console.log('pushups 30', C.strengthKcal([{reps:15},{reps:15}], 81, R, {pushups:true}));
+console.log('walk 30 not counted', C.activityKcal({type:'walk',minutes:30,watchCounted:false}, 80, R));
+console.log('walk 30 counted', C.activityKcal({type:'walk',minutes:30}, 80, R));
+console.log('football delta', C.activityKcal({type:'football',before:{kg:81.4,watch:900},after:{kg:80.6,watch:1550}}, 81, R), C.footballStats({before:{kg:81.4,watch:900},after:{kg:80.6,watch:1550}}));
+console.log('football fallback', C.activityKcal({type:'football',watchCounted:false}, 81, R));
+const day={foods:[{kcal:425,protein:40},{kcal:160,protein:2}],watch:{kcal:650},activities:[{type:'pushups',reps:40,watchCounted:false}]};
+console.log('balance', C.dayBalance(day,{bmr:1700,bodyKg:80,rules:R,sessions:[{status:'done',items:[{exId:'x',name:'Hip thrust',sets:[{reps:10,w:45,unit:'lb'},{reps:10,w:45,unit:'lb'}]}]}]}));
+const P = x => { const r = C.nextStrength(x); return r && (r.action+': '+r.text+' | '+r.why); };
+console.log(P({planned:{sets:4,reps:10},sets:[{reps:10,kg:5},{reps:10,kg:5},{reps:10,kg:5},{reps:10,kg:12}],feel:'bien'}));
+console.log(P({planned:{sets:4,reps:10},sets:[{reps:10,kg:10},{reps:10,kg:10},{reps:10,kg:10},{reps:10,kg:10}],feel:'facil'}));
+console.log(P({planned:{sets:4,reps:15},sets:[{reps:15,w:15,unit:'lb'},{reps:15,w:15,unit:'lb'},{reps:15,w:15,unit:'lb'},{reps:15,w:15,unit:'lb'}],feel:'bien'}));
+console.log(P({planned:{sets:3,reps:10},sets:[{reps:10,kg:30},{reps:10,kg:30},{reps:10,kg:30}],feel:'dificil'}));
+console.log(P({planned:{sets:3,reps:10},sets:[{reps:7,kg:30},{reps:6,kg:30},{reps:5,kg:30}],feel:'dificil'}));
+console.log(P({planned:{sets:3,reps:10},sets:[{reps:10,kg:30}],feel:'dolor'}));
+console.log(C.nextRunWalk({runMin:1,walkMin:2,rounds:4,feel:'bien'}), C.nextRunWalk({runMin:2,walkMin:1,rounds:4,feel:'dificil',completed:false}));
+const seed = require('fs').readFileSync(__dirname + '/../seed.js','utf8');
+const S = new Function('DEFAULT_RULES', seed + '; return {SEED_EQUIPMENT, SEED_EXERCISES};')(R);
+for (const t of ['A','B','C']) { const b = C.buildSession({template:t,timeMin:60,energy:'bien',exercises:S.SEED_EXERCISES,equipment:S.SEED_EQUIPMENT,sessions:[],rules:R,date:'2026-11-09'}); console.log(t, b.title, b.items.map(i=>i.name+'['+i.pattern+']'), b.cardio&&b.cardio.text, b.warnings); }
+const h = C.buildSession({template:'A',location:'casa',timeMin:30,energy:'normal',exercises:S.SEED_EXERCISES,equipment:S.SEED_EQUIPMENT,sessions:[],rules:R});
+console.log('casa', h.title, h.items.map(i=>i.name));
+console.log('A before football', C.buildSession({template:'A',timeMin:45,energy:'normal',exercises:S.SEED_EXERCISES,equipment:S.SEED_EQUIPMENT,sessions:[],rules:R,tomorrowFootball:true}).warnings);
+console.log(C.tzNow(new Date('2026-11-09T03:30:00Z')));
