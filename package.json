@@ -3,7 +3,7 @@
   "private": true,
   "description": "Mi Coach: weight-loss, recomposition and gym coach (static frontend + Supabase).",
   "scripts": {
-    "test": "node tests/calc.test.cjs && node tests/nudges.test.cjs && node tests/rotation.test.cjs && node tests/session-kcal.test.cjs && node tests/blocked-activities.test.cjs && node tests/review.test.cjs && node tests/chat.test.cjs",
+    "test": "node tests/calc.test.cjs && node tests/nudges.test.cjs && node tests/rotation.test.cjs && node tests/session-kcal.test.cjs && node tests/blocked-activities.test.cjs && node tests/review.test.cjs && node tests/chat.test.cjs && node tests/target.test.cjs",
     "icons": "node tools/make-icons.mjs",
     "db": "node tools/db.mjs"
   },

@@ -46,6 +46,8 @@ function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace
 // ---------- Defaults (also what seed() writes) ----------
 const DEFAULT_RULES = {
   deficitTarget: 450, deficitMin: 400, deficitMax: 500,
+  // Target (spec 13): base = BMR x activityFactor; target = base - deficitTarget + eatBackFactor x extra burn, never below targetFloor.
+  activityFactor: 1.2, eatBackFactor: 0.5, targetFloor: 1600,
   proteinMin: 130, proteinMax: 150,
   bmrFallback: 1700, // generic; the real value (latest scale BMR) lives in the db (config/rules + weigh-ins)
   coffee: { name: 'French Vanilla (máquina de polvo del trabajo, 2 depósitos)', kcal12: 160, kcal14: 185, provisional: true, note: 'Provisional hasta foto de la etiqueta del polvo' },
@@ -162,24 +164,34 @@ function sessionKcal(sess, bodyKg, rules = DEFAULT_RULES, exById = {}) {
 
 // ---------- Day balance ----------
 // ctx: {bmr, bodyKg, rules, sessions: sessions of that date}
+// base = BMR x activityFactor (digestion + normal movement up to the movement target).
+// extra = max(0, watch - movementTarget) + exercise the watch did not count.
+// target = max(targetFloor, base - deficitTarget + eatBackFactor x extra). deficit = base + extra - consumed.
 function dayBalance(day, ctx) {
   const rules = ctx.rules || DEFAULT_RULES;
   const bmr = num(ctx.bmr) || rules.bmrFallback;
+  const af = num(rules.activityFactor) || DEFAULT_RULES.activityFactor, eat = num(rules.eatBackFactor) ?? DEFAULT_RULES.eatBackFactor;
+  const floor = num(rules.targetFloor) ?? DEFAULT_RULES.targetFloor, mvTarget = num(rules.movementTarget) ?? DEFAULT_RULES.movementTarget;
   const watch = num(day && day.watch && day.watch.kcal) || 0;
   let exExtra = 0;
   for (const a of (day && day.activities) || []) exExtra += activityKcal(a, ctx.bodyKg, rules).extra;
   for (const s of ctx.sessions || []) if (s.status !== 'discarded') exExtra += sessionKcal(s, ctx.bodyKg, rules, ctx.exById || {}).extra;
-  const burned = r0(bmr + watch + exExtra);
+  const base = r0(bmr * af);
+  const watchExtra = r0(Math.max(0, watch - mvTarget));
+  const extra = r0(watchExtra + exExtra);
+  const baseTarget = base - rules.deficitTarget;
+  const eatBack = r0(eat * extra);
+  const target = Math.max(floor, baseTarget + eatBack);
+  const burned = base + extra; // expenditure used for the deficit
   const foods = (day && day.foods) || [];
   const consumed = r0(foods.reduce((a, f) => a + (num(f.kcal) || 0), 0));
   const protein = r0(foods.reduce((a, f) => a + (num(f.protein) || 0), 0));
-  const target = burned - rules.deficitTarget;
-  const deficit = burned - consumed;
+  const deficit = burned - consumed, remaining = target - consumed;
   let status = 'ok';
-  if (consumed > burned) status = 'over';
+  if (remaining < 0) status = 'over';
   else if (deficit < rules.deficitMin) status = 'warn';
   const proteinStatus = protein >= rules.proteinMin ? 'ok' : 'warn';
-  return { bmr, watch, exExtra: r0(exExtra), burned, consumed, protein, target, deficit, remaining: target - consumed, proteinLeft: Math.max(0, rules.proteinMin - protein), status, proteinStatus, hasFood: foods.length > 0, hasWatch: watch > 0 };
+  return { bmr, base, watch, watchExtra, exExtra: r0(exExtra), extra, baseTarget, eatBack, floored: target > baseTarget + eatBack, burned, consumed, protein, target, deficit, remaining, overBurn: consumed > burned, proteinLeft: Math.max(0, rules.proteinMin - protein), status, proteinStatus, hasFood: foods.length > 0, hasWatch: watch > 0 };
 }
 
 // ---------- Strength progression ----------
@@ -638,7 +650,8 @@ function computeNudges(S) {
   }
   const b = S.balance;
   if (b && b.hasFood) {
-    if (b.status === 'over') move('exceso', 'alerta', `Vas ${-b.deficit} kcal por encima de lo quemado.`, -b.deficit);
+    if (b.overBurn) move('exceso', 'alerta', `Vas ${-b.deficit} kcal por encima de lo que gastas hoy.`, -b.deficit);
+    else if (b.remaining < 0) move('pasado', 'alerta', `Vas ${-b.remaining} kcal pasado de tu meta de hoy (${b.target}).`, -b.remaining);
     else {
       // Projection: if dinner is not logged yet, assume a typical dinner (~500 kcal).
       const dinnerLogged = (day.foods || []).some(f => mealSlot(f.at) === 'cena');
