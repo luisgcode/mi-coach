@@ -18,9 +18,9 @@ near(gym.extra, 250, 'gym extra'); near(gym.target, 1775, 'gym day');
 // Football +650: the watch counted the match (watch 250 + 650), nothing double counted.
 const fb = bal({ watch: { kcal: 900 }, activities: [{ type: 'football', before: { watch: 200 }, after: { watch: 850 } }] });
 assert.strictEqual(fb.extra, 650, 'only the watch over 250 counts'); near(fb.target, 1975, 'football day');
-// Deficit = base + extra - consumed, remaining = target - consumed.
+// Burned = BMR + watch + exercise the watch did not count; deficit = burned - consumed; remaining = target - consumed.
 const ate = bal({ watch: { kcal: 900 }, foods: [{ kcal: 1500, protein: 120 }] });
-assert.strictEqual(ate.deficit, 2100 + 650 - 1500); assert.strictEqual(ate.remaining, ate.target - 1500); assert.strictEqual(ate.status, 'ok');
+assert.strictEqual(ate.burned, 1750 + 900); assert.strictEqual(ate.deficit, 1750 + 900 - 1500); assert.strictEqual(ate.remaining, ate.target - 1500); assert.strictEqual(ate.status, 'ok');
 const over = bal({ watch: { kcal: 200 }, foods: [{ kcal: 1800, protein: 120 }] });
 assert.strictEqual(over.status, 'over', 'past the target'); assert.ok(!over.overBurn, 'but still under what he spends');
 // Floor: a low BMR never drops the target below 1600.

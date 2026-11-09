@@ -166,7 +166,8 @@ function sessionKcal(sess, bodyKg, rules = DEFAULT_RULES, exById = {}) {
 // ctx: {bmr, bodyKg, rules, sessions: sessions of that date}
 // base = BMR x activityFactor (digestion + normal movement up to the movement target).
 // extra = max(0, watch - movementTarget) + exercise the watch did not count.
-// target = max(targetFloor, base - deficitTarget + eatBackFactor x extra). deficit = base + extra - consumed.
+// target = max(targetFloor, base - deficitTarget + eatBackFactor x extra).
+// burned (what he sees, like his old chats) = BMR + the watch's general counter + exercise the watch did not count. deficit = burned - consumed.
 function dayBalance(day, ctx) {
   const rules = ctx.rules || DEFAULT_RULES;
   const bmr = num(ctx.bmr) || rules.bmrFallback;
@@ -182,7 +183,7 @@ function dayBalance(day, ctx) {
   const baseTarget = base - rules.deficitTarget;
   const eatBack = r0(eat * extra);
   const target = Math.max(floor, baseTarget + eatBack);
-  const burned = base + extra; // expenditure used for the deficit
+  const burned = r0(bmr + watch + exExtra); // the watch is the truth
   const foods = (day && day.foods) || [];
   const consumed = r0(foods.reduce((a, f) => a + (num(f.kcal) || 0), 0));
   const protein = r0(foods.reduce((a, f) => a + (num(f.protein) || 0), 0));

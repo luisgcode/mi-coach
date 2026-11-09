@@ -672,20 +672,19 @@ function cardLedger(d, day, rules) {
   const b = balanceFor(d), lines = exerciseLines(d, day);
   const bmrDay = daysArr().filter(x => x.date <= d && x.weighIn && num(x.weighIn.bmr_scale_kcal)).slice(-1)[0];
   let h = `<section class="card" aria-labelledby="h-bal"><div class="row sp nw"><h2 id="h-bal" class="grow">Balance de hoy</h2>${b.hasFood ? `<span class="pill ${b.status}">${STATUS_TXT[b.status]}</span>` : ''}</div><table class="ledger">`;
-  h += `<tr><td>BMR <span class="tiny muted">${bmrDay ? 'báscula ' + fmtDateEs(bmrDay.date) : 'regla'} × ${rules.activityFactor}</span></td><td class="n">${fmt(b.base)}</td></tr>`;
-  h += `<tr><td>Reloj <span class="tiny muted">${day.watch ? 'contador general, ' + esc(day.watch.at) : 'sin dato aún'}</span></td><td class="n">${day.watch ? fmt(b.watch) : '—'}</td></tr>`;
-  h += `<tr class="sub"><td>· Tu base ya cubre ${rules.movementTarget} de reloj; suma lo que pase de ${rules.movementTarget}${day.watch && !b.watchExtra ? ` (te faltan ${fmt(Math.max(0, rules.movementTarget - b.watch))})` : ''}</td><td class="n">+${fmt(b.watchExtra)}</td></tr>`;
+  h += `<tr><td>🔥 BMR <span class="tiny muted">${bmrDay ? 'báscula ' + fmtDateEs(bmrDay.date) : 'estimado'}</span></td><td class="n">${fmt(b.bmr)}</td></tr>`;
+  h += `<tr><td>🔥 Smartwatch <span class="tiny muted">${day.watch ? 'contador general, ' + esc(day.watch.at) : 'sin dato aún'}</span></td><td class="n">${day.watch ? fmt(b.watch) : '—'}</td></tr>`;
   const unc = lines.filter(l => !l.counted);
-  if (unc.length) { h += `<tr><td>Ejercicios <span class="tiny muted">lo que el reloj no contó</span></td><td class="n">+${fmt(b.exExtra)}</td></tr>`; for (const l of unc) h += `<tr class="sub"><td>· ${esc(l.label)}${l.note ? `<div class="tiny muted">${esc(l.note)}</div>` : ''}</td><td class="n">${fmt(l.extra)}</td></tr>`; }
-  h += `<tr class="tot"><td>Gasto de hoy</td><td class="n">${fmt(b.burned)}</td></tr>`;
+  if (unc.length) { h += `<tr><td>🔥 Ejercicios <span class="tiny muted">lo que el reloj no contó</span></td><td class="n">+${fmt(b.exExtra)}</td></tr>`; for (const l of unc) h += `<tr class="sub"><td>· ${esc(l.label)}${l.note ? `<div class="tiny muted">${esc(l.note)}</div>` : ''}</td><td class="n">${fmt(l.extra)}</td></tr>`; }
+  h += `<tr class="tot"><td>🔥 Total quemado</td><td class="n">${fmt(b.burned)}</td></tr>`;
   const foods = (day.foods || []).slice().sort((a, b2) => (a.at || '') < (b2.at || '') ? -1 : 1);
   if (!foods.length) h += `<tr class="sub"><td colspan="2">Aún no registras comida. Cuéntasela al chat (texto o foto).</td></tr>`;
   for (const f of foods) {
     const key = 'food:' + f.id, c = confirmBtns(key, 'delFood', f.id);
     h += `<tr><td><button class="tapitem" data-act="correct" data-arg="${esc(f.name + ' (' + fmt(f.kcal) + ' kcal, ' + fmt(f.protein) + ' g)')}" aria-label="Corregir ${esc(f.name)} en el chat">${esc(f.name)}${f.qty ? ` <span class="tiny muted">${esc(f.qty)}</span>` : ''}<span class="tiny muted" style="display:block">${esc(f.at || '')} · ${fmt(f.protein)} g proteína</span></button>${c ? `<div>${c}</div>` : ''}</td><td class="n">${fmt(f.kcal)}<button class="xbtn" data-act="ask" data-arg="${esc(key)}" aria-label="Borrar ${esc(f.name)}">×</button></td></tr>`;
   }
-  h += `<tr class="tot"><td>Total consumido</td><td class="n">${fmt(b.consumed)}</td></tr>`;
-  h += `<tr class="def"><td>Déficit</td><td class="n ${b.hasFood ? b.status : ''}">${fmt(b.deficit)}</td></tr></table>`;
+  h += `<tr class="tot"><td>🍽️ Total consumido</td><td class="n">${fmt(b.consumed)}</td></tr>`;
+  h += `<tr class="def"><td>${b.deficit >= 0 ? '✅' : '⚠️'} Déficit actual</td><td class="n ${b.hasFood ? b.status : ''}">${fmt(b.deficit)}</td></tr></table>`;
   const pct = Math.min(100, b.burned ? b.consumed / b.burned * 100 : 0), tpct = b.burned ? Math.min(100, b.target / b.burned * 100) : 0;
   h += `<div style="margin-top:10px"><div class="row sp small"><span>Meta de hoy: <b class="num">${fmt(b.target)}</b> kcal</span><span class="${b.remaining < 0 ? 'over' : 'ink2'}">${b.remaining >= 0 ? 'te quedan ' + fmt(b.remaining) : 'te pasaste ' + fmt(-b.remaining)}</span></div>
     <div class="bar ${b.status === 'ok' ? '' : b.status}" style="margin-top:4px" role="img" aria-label="Consumido ${fmt(b.consumed)} de ${fmt(b.target)} de meta"><i style="width:${pct}%"></i><span class="mark" style="left:${tpct}%"></span></div>
@@ -1404,7 +1403,7 @@ function buildContext() {
   L.push('HORAS DE COMIDA APRENDIDAS: ' + Object.entries(mt).map(([k, v]) => `${k} ${v || '¿?'}`).join(', '));
   const b = balanceFor(d), day = dayOf(d) || {};
   if (beforePlan(d)) L.push(`HOY ES ANTES DEL PLAN: el plan empieza el ${planStartDate()}. Hoy no hay plan ni recordatorios; el día 0 es solo la línea base de peso. No pidas registrar nada hoy.`);
-  L.push(`HOY: peso ${day.weighIn ? day.weighIn.weight_kg + ' kg' : 'sin pesaje'}; reloj ${day.watch ? day.watch.kcal + ' kcal (' + day.watch.at + ')' : 'sin dato'}; gasto ${b.burned} (base ${b.base} + extra ${b.extra}); consumido ${b.consumed}; déficit ${b.deficit}; ${targetLine(b, d)} Quedan ${b.remaining}; proteína ${b.protein} g (faltan ${b.proteinLeft}). Comidas: ${(day.foods || []).map(f => `${f.at} ${f.name} ${f.kcal}/${f.protein}g`).join('; ') || 'ninguna'}. Actividad: ${(day.activities || []).map(a => a.type + (a.minutes ? ' ' + a.minutes + 'min' : '')).join(', ') || 'ninguna'}.`);
+  L.push(`HOY: peso ${day.weighIn ? day.weighIn.weight_kg + ' kg' : 'sin pesaje'}; reloj ${day.watch ? day.watch.kcal + ' kcal (' + day.watch.at + ')' : 'sin dato'}; total quemado ${b.burned} (BMR ${b.bmr} + reloj ${b.watch} + ejercicios no contados ${b.exExtra}); consumido ${b.consumed}; déficit ${b.deficit}; ${targetLine(b, d)} Quedan ${b.remaining}; proteína ${b.protein} g (faltan ${b.proteinLeft}). Comidas: ${(day.foods || []).map(f => `${f.at} ${f.name} ${f.kcal}/${f.protein}g`).join('; ') || 'ninguna'}. Actividad: ${(day.activities || []).map(a => a.type + (a.minutes ? ' ' + a.minutes + 'min' : '')).join(', ') || 'ninguna'}.`);
   const act = activeSession();
   if (act) L.push(`SESIÓN EN CURSO: ${act.title}: ${(act.items || []).map(it => it.name + ' plan ' + describeSets(it.planned.list || []) + ' hecho ' + describeSets((it.sets || []).filter(x => num(x.reps) > 0).map(x => ({ reps: num(x.reps), w: num(x.w), unit: x.unit })))).join('; ')}`);
   const rows = [];
@@ -1441,6 +1440,7 @@ GYM POR CHAT: la pestaña Gym es solo lectura; la sesión la llevas tú.
 - "Terminé, el reloj marca Y" → end_session y responde corto: kcal (estimado − reloj = extra), récords y la próxima vez.
 - Foto de una máquina que ya existe ("esta es la prensa") → link_equipment_photo. Máquina nueva → add_equipment con use_attached_photo.
 VIERNES: pregunta por la disponibilidad del finde y guárdala con set_availability.
+BALANCE: cuando le muestres cómo va el día, usa esta tabla (Ítem | Kcal), igual que la pantalla Hoy: 🔥 BMR, 🔥 Smartwatch (contador general), 🔥 ejercicios que el reloj no contó (solo si hay), **Total quemado**, cada comida con sus kcal, **Total consumido**, ✅ **Déficit actual**; debajo, la meta de hoy y la proteína.
 RELOJ = VERDAD: Luis se guía SOLO por el contador general del reloj. Si una actividad la contó el reloj, nunca le digas un estimado tuyo de kcal de esa actividad; habla del número del reloj. Pídele el contador general después de cada actividad y guárdalo con set_watch_kcal.
 HOY SIEMPRE AL DÍA: cada vez que registres algo que ya hizo (actividad, sesión, comida, pesaje), revisa RECORDATORIOS ABIERTOS en el mismo turno: descarta con dismiss_nudge lo que ya cumplió y, si quedó una parte pendiente (ej. el gym de la tarde), crea con add_nudge uno nuevo solo con lo pendiente. Nunca dejes en Hoy algo que ya hizo. Un solo recordatorio de plan por día: antes de crear uno nuevo, descarta el anterior.
 TIEMPO DE SESIÓN: lunes y viernes trabaja desde casa y está libre desde las 16:00, así que son sus días largos: sesión de hasta 90 min (la más pesada de la semana o fuerza + cardio). Martes a jueves sale libre ~18:00: sesión de 60 min como máximo, más directa. Si no te dice cuánto tiempo tiene, usa eso sin preguntar; si te dice otro tiempo, usa el suyo.
