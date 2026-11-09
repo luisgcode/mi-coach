@@ -189,3 +189,7 @@ body.kb .app{padding-bottom:12px}
   .sheet{align-items:center}
   .sheet .panel{border-radius:18px;max-height:86dvh}
 }
+
+.iconbtn.rec{background:var(--bad);border-color:var(--bad);color:#fff;animation:recpulse 1.2s ease-in-out infinite}
+@keyframes recpulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--bad) 30%,transparent)}}
+@media (prefers-reduced-motion:reduce){.iconbtn.rec{animation:none}}
