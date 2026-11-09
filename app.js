@@ -248,7 +248,7 @@ const aiState = { state: 'unknown', images: false, tools: true, msg: '' }; // st
 const ui = {
   tab: lsGet('tab', 'hoy'), confirm: null, weighPending: null, weighManual: false, weighBusy: false,
   foodPending: null, foodText: '', foodImgs: [], foodBusy: false, libQ: '', manualFood: false,
-  actForm: false, actType: 'walk', gymTime: 45, gymEnergy: 'normal', gymTemplate: null, gymLocation: 'gym',
+  actForm: false, actType: 'walk', gymTime: null, gymEnergy: 'normal', gymTemplate: null, gymLocation: 'gym',
   eqForm: false, eqPhoto: null, painOffer: null, parseBusy: null, howBusy: false, howOpen: {},
   range: lsGet('range', '90'), weekAI: null, weekBusy: false, sheet: null, finishOffer: null,
   chat: { local: [], busy: false, ctl: null, imgs: [], draft: '', viewDate: null, showDays: false }
@@ -285,10 +285,12 @@ function balanceFor(date) {
 function blockedFoods() { return cfg('rules').blockedFoods || []; }
 function isBlockedFood(name) { const n = norm(name); return blockedFoods().some(b => n.includes(norm(b))); }
 function today() { return tzNow().date; }
+// Default session length when he doesn't say: Mon/Fri (home office, free from 16:00) 90 min; other days 60.
+function defaultSessionMin(dow = tzNow().dow) { return dow === 1 || dow === 5 ? 90 : 60; }
 function lastRunWalk() {
   const out = [];
   for (const d of daysArr()) for (const a of d.activities || []) if (a.type === 'runwalk' || a.type === 'treadmill_int') out.push({ date: d.date, ...a });
-  for (const s of sessionsArr()) if (s.cardio && s.cardio.done) out.push({ date: s.date, ...s.cardio });
+  for (const s of sessionsArr()) if (s.cardio && s.cardio.done && s.cardio.type === 'runwalk') out.push({ date: s.date, ...s.cardio });
   out.sort((a, b) => a.date < b.date ? -1 : 1);
   return out[out.length - 1] || null;
 }
@@ -826,7 +828,7 @@ function exUsable(e) { const ids = new Set(availEquipment().map(q => q.id)); ret
 function tomorrowFootball() { const p = cfg('plan').days[DOW_KEYS[(tzNow().dow + 1) % 7]]; return !!(p && p.kind === 'football'); }
 function previewSession() {
   const T = tzNow(), plan = cfg('plan').days[DOW_KEYS[T.dow]] || {};
-  return buildSession({ template: decidedTemplate(), location: ui.gymLocation, timeMin: ui.gymTime, energy: ui.gymEnergy, exercises: exArr(), equipment: eqArr(), sessions: sessionsArr(), rules: cfg('rules'), date: T.date, tomorrowFootball: tomorrowFootball(), lastRunWalk: lastRunWalk() });
+  return buildSession({ template: decidedTemplate(), location: ui.gymLocation, timeMin: ui.gymTime || defaultSessionMin(), energy: ui.gymEnergy, exercises: exArr(), equipment: eqArr(), sessions: sessionsArr(), rules: cfg('rules'), date: T.date, tomorrowFootball: tomorrowFootball(), lastRunWalk: lastRunWalk() });
 }
 
 // ONE decision: the plan's template, or (off-plan day) the gym day not yet done this week.
@@ -838,7 +840,7 @@ function decidedTemplate() {
 }
 function startSessionFrom(o) {
   const T = tzNow(), d = T.date;
-  const p = buildSession({ template: o.template || decidedTemplate(), location: o.location || ui.gymLocation, timeMin: o.timeMin || ui.gymTime, energy: o.energy || ui.gymEnergy, exercises: exArr(), equipment: eqArr(), sessions: sessionsArr(), rules: cfg('rules'), date: d, tomorrowFootball: tomorrowFootball(), lastRunWalk: lastRunWalk(), surprise: o.surprise || 0 });
+  const p = buildSession({ template: o.template || decidedTemplate(), location: o.location || ui.gymLocation, timeMin: o.timeMin || ui.gymTime || defaultSessionMin(), energy: o.energy || ui.gymEnergy, exercises: exArr(), equipment: eqArr(), sessions: sessionsArr(), rules: cfg('rules'), date: d, tomorrowFootball: tomorrowFootball(), lastRunWalk: lastRunWalk(), surprise: o.surprise || 0 });
   if (!p.items.length && !p.finisher && !p.cardio) return p;
   const n = sessionsArr().filter(s => s.date === d).length;
   const id = d + '-' + 'abcdefghij'[Math.min(9, n)];
@@ -920,7 +922,7 @@ function viewPreSession() {
   let h = `<section class="card" aria-labelledby="h-gymhoy"><h2 id="h-gymhoy">${plan.kind === 'gym' ? esc(plan.title) : 'Hoy no toca gym'}</h2>`;
   if (plan.kind !== 'gym') h += `<p class="small ink2" style="margin-top:0">Plan de hoy: ${esc(plan.title || 'libre')}. Si igual vas, esta es tu sesión:</p>`;
   h += `<p class="small ink2" style="margin:0 0 6px">¿Dónde?</p><div class="chips">${chip('gymLoc', 'gym', ui.gymLocation, 'Gym')}${chip('gymLoc', 'casa', ui.gymLocation, 'Casa')}</div>`;
-  h += `<p class="small ink2" style="margin:10px 0 6px">¿Cuánto tiempo tienes?</p><div class="chips">${[30, 45, 60, 90].map(m => chip('gymTime', m, ui.gymTime, m + ' min')).join('')}</div>`;
+  h += `<p class="small ink2" style="margin:10px 0 6px">¿Cuánto tiempo tienes?</p><div class="chips">${[30, 45, 60, 90].map(m => chip('gymTime', m, ui.gymTime || defaultSessionMin(), m + ' min')).join('')}</div>`;
   h += `<p class="small ink2" style="margin:10px 0 6px">¿Cómo está tu energía?</p><div class="chips">${ENERGY.map(([k, l]) => chip('gymEnergy', k, ui.gymEnergy, l)).join('')}</div>`;
   const p = previewSession();
   if (p.warnings.length) h += p.warnings.map(w => `<p class="small warn" style="margin:8px 0 0">${esc(w)}</p>`).join('');
@@ -1436,6 +1438,7 @@ GYM POR CHAT: la pestaña Gym es solo lectura; la sesión la llevas tú.
 - "Terminé, el reloj marca Y" → end_session y responde corto: kcal (estimado − reloj = extra), récords y la próxima vez.
 - Foto de una máquina que ya existe ("esta es la prensa") → link_equipment_photo. Máquina nueva → add_equipment con use_attached_photo.
 VIERNES: pregunta por la disponibilidad del finde y guárdala con set_availability.
+TIEMPO DE SESIÓN: lunes y viernes trabaja desde casa y está libre desde las 16:00, así que son sus días largos: sesión de hasta 90 min (la más pesada de la semana o fuerza + cardio). Martes a jueves sale libre ~18:00: sesión de 60 min como máximo, más directa. Si no te dice cuánto tiempo tiene, usa eso sin preguntar; si te dice otro tiempo, usa el suyo.
 SALUD: no prescribes dietas médicas ni diagnosticas. Para preguntas médicas o de suplementos, dile que lo consulte con su médico.
 LÍMITES DE LA APP: si pide una pantalla, botón o función nueva que la app no tiene, dile que se lo pida a Claude Code; tú no puedes cambiar la app.
 Nunca inventes datos que no estén en el contexto. Si algo no está claro (fecha, porción, unidad), pregunta en una línea.`;
@@ -1554,7 +1557,7 @@ const TOOL_SPECS = [
     execute: async (x) => {
       let s = activeSession();
       if (!s) {
-        const p = startSessionFrom({ timeMin: Math.min(90, num(x.time_min) || 60), energy: x.energy || 'normal', location: x.location || 'gym', surprise: x.surprise ? Date.now() % 100000 + 1 : 0, watchStart: num(x.watch_kcal) });
+        const p = startSessionFrom({ timeMin: Math.min(90, num(x.time_min) || defaultSessionMin()), energy: x.energy || 'normal', location: x.location || 'gym', surprise: x.surprise ? Date.now() % 100000 + 1 : 0, watchStart: num(x.watch_kcal) });
         if (!p.items.length && !p.finisher && !p.cardio) throw new Error('no tengo equipo suficiente para el objetivo de hoy');
         await (wq['sessions/' + p.id] || Promise.resolve()); s = activeSession();
       } else if (num(x.watch_kcal) != null && s.watchStart == null) await writeSess(s.id, c => { c.watchStart = num(x.watch_kcal); });
@@ -1731,7 +1734,7 @@ const TOOL_SPECS = [
   { name: 'surprise_session', description: 'Arma UNA sesión sorpresa (distinta) dentro de su inventario y el objetivo del día, y la deja lista en Gym. Devuelve la sesión.', inputSchema: { type: 'object', properties: { time_min: S_NUM, energy: { type: 'string', enum: ['bien', 'normal', 'cansado'] }, template: { type: 'string', enum: ['A', 'B', 'C'] } } },
     execute: async (x) => {
       if (activeSession()) throw new Error('ya hay una sesión en curso hoy');
-      const p = startSessionFrom({ template: x.template, timeMin: Math.min(90, num(x.time_min) || 45), energy: x.energy || 'normal', surprise: Date.now() % 100000 + 1 });
+      const p = startSessionFrom({ template: x.template, timeMin: Math.min(90, num(x.time_min) || defaultSessionMin()), energy: x.energy || 'normal', surprise: Date.now() % 100000 + 1 });
       if (!p.items.length && !p.finisher) throw new Error('no tengo equipo suficiente para ese objetivo');
       await (wq['sessions/' + p.id] || Promise.resolve());
       { const s2 = activeSession(); if (s2) chatCard(s2.id); }

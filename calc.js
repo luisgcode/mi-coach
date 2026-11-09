@@ -425,9 +425,36 @@ function buildSession(args) {
   // A superset group with a single exercise is just straight sets.
   const counts = {}; for (const it of items) if (it.group) counts[it.group] = (counts[it.group] || 0) + 1;
   for (const it of items) if (it.group && counts[it.group] < 2) it.group = null;
+  // Long days (Mon/Fri, up to 90 min): use the spare time for results, not idle minutes.
+  // 1) one more set on the first two exercises (main lifts, more stimulus); 2) a low-impact interval block on the elliptical.
+  let est = 5 + items.length * perEx + cardioMin + finMin;
+  if (!home && energy !== 'cansado' && format !== 'circuito' && timeMin - est >= 6) {
+    for (const it of items.slice(0, 2)) {
+      if (timeMin - est < 3) break;
+      const lastSet = it.planned.list[it.planned.list.length - 1];
+      it.planned.list = it.planned.list.concat([{ ...lastSet }]); it.planned.sets = it.planned.list.length;
+      it.sets = it.sets.concat([{ reps: '', w: '', unit: it.planned.unit, done: false }]);
+      it.why += ' Día largo: una serie más.';
+      est += 2.25;
+    }
+  }
+  // Circuit: extra full rounds (max 5) while the time allows.
+  if (!home && energy !== 'cansado' && format === 'circuito' && items.length) {
+    const roundMin = items.length * 1.6 + 1;
+    while (timeMin - est >= roundMin && items[0].planned.list.length < 5) {
+      for (const it of items) { const ls = it.planned.list[it.planned.list.length - 1]; it.planned.list = it.planned.list.concat([{ ...ls }]); it.planned.sets = it.planned.list.length; it.sets = it.sets.concat([{ reps: '', w: '', unit: it.planned.unit, done: false }]); }
+      if (!/vuelta más/.test(items[0].why)) items[0].why += ' Día largo: vuelta más al circuito.';
+      est += roundMin;
+    }
+  }
+  if (!home && !cardio && hasElliptical && timeMin - est >= 10) {
+    const rounds = Math.min(10, Math.floor((timeMin - est) / 2)), hard = energy === 'cansado' ? 'moderado' : 'fuerte';
+    cardio = { type: 'elliptical', runMin: 1, walkMin: 1, rounds, text: `${rounds} × (1 min ${hard} + 1 min suave) en elíptica`, why: 'Día largo: intervalos sin impacto para quemar más y ganar aguante para el fútbol.', watchCounted: true, extra: true };
+    cardioMin += rounds * 2; est += rounds * 2;
+  }
   if (tKey === 'A' && energy === 'cansado') warnings.push('Cansado: saltos al final y solo si te sientes rápido.');
   const base = home ? 'En casa · ' + T.title.split('· ')[1] : T.title;
-  return { template: tKey, location: home ? 'casa' : 'gym', title: (args.surprise ? 'Sorpresa · ' : '') + base, format, formatLabel: FORMATS[format], goal: T.goal, focus: T.focus, timeMin, energy, items, cardio, finisher, warnings, estMin: r0(5 + items.length * perEx + cardioMin + finMin) };
+  return { template: tKey, location: home ? 'casa' : 'gym', title: (args.surprise ? 'Sorpresa · ' : '') + base, format, formatLabel: FORMATS[format], goal: T.goal, focus: T.focus, timeMin, energy, items, cardio, finisher, warnings, estMin: r0(est) };
 }
 
 // ---------- Indoor movement options (winter) ----------
