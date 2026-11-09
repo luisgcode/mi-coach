@@ -673,9 +673,10 @@ function cardLedger(d, day, rules) {
   const bmrDay = daysArr().filter(x => x.date <= d && x.weighIn && num(x.weighIn.bmr_scale_kcal)).slice(-1)[0];
   let h = `<section class="card" aria-labelledby="h-bal"><div class="row sp nw"><h2 id="h-bal" class="grow">Balance de hoy</h2>${b.hasFood ? `<span class="pill ${b.status}">${STATUS_TXT[b.status]}</span>` : ''}</div><table class="ledger">`;
   h += `<tr><td>BMR <span class="tiny muted">${bmrDay ? 'báscula ' + fmtDateEs(bmrDay.date) : 'regla'} × ${rules.activityFactor}</span></td><td class="n">${fmt(b.base)}</td></tr>`;
-  h += `<tr><td>Reloj sobre ${rules.movementTarget} <span class="tiny muted">${day.watch ? 'contador general ' + fmt(b.watch) + ' (' + esc(day.watch.at) + ')' : 'sin dato aún'}</span></td><td class="n">${fmt(b.watchExtra)}</td></tr>`;
-  h += `<tr><td>Ejercicios <span class="tiny muted">lo que el reloj no contó</span></td><td class="n">${fmt(b.exExtra)}</td></tr>`;
-  for (const l of lines) h += `<tr class="sub"><td>· ${esc(l.label)}${l.counted ? ' <span class="tiny">(ya en el reloj, ' + fmt(l.gross) + ')</span>' : ''}${l.note ? `<div class="tiny muted">${esc(l.note)}</div>` : ''}</td><td class="n">${l.counted ? '0' : fmt(l.extra)}</td></tr>`;
+  h += `<tr><td>Reloj <span class="tiny muted">${day.watch ? 'contador general, ' + esc(day.watch.at) : 'sin dato aún'}</span></td><td class="n">${day.watch ? fmt(b.watch) : '—'}</td></tr>`;
+  h += `<tr class="sub"><td>· Tu base ya cubre ${rules.movementTarget} de reloj; suma lo que pase de ${rules.movementTarget}${day.watch && !b.watchExtra ? ` (te faltan ${fmt(Math.max(0, rules.movementTarget - b.watch))})` : ''}</td><td class="n">+${fmt(b.watchExtra)}</td></tr>`;
+  const unc = lines.filter(l => !l.counted);
+  if (unc.length) { h += `<tr><td>Ejercicios <span class="tiny muted">lo que el reloj no contó</span></td><td class="n">+${fmt(b.exExtra)}</td></tr>`; for (const l of unc) h += `<tr class="sub"><td>· ${esc(l.label)}${l.note ? `<div class="tiny muted">${esc(l.note)}</div>` : ''}</td><td class="n">${fmt(l.extra)}</td></tr>`; }
   h += `<tr class="tot"><td>Gasto de hoy</td><td class="n">${fmt(b.burned)}</td></tr>`;
   const foods = (day.foods || []).slice().sort((a, b2) => (a.at || '') < (b2.at || '') ? -1 : 1);
   if (!foods.length) h += `<tr class="sub"><td colspan="2">Aún no registras comida. Cuéntasela al chat (texto o foto).</td></tr>`;
@@ -727,8 +728,8 @@ function cardActivities(d, day) {
     const k = activityKcal(a, kg, rules), t = ACT_TYPES[a.type] || ACT_TYPES.other;
     const key = 'act:' + a.id, c = confirmBtns(key, 'delAct', a.id);
     const what = a.type === 'runwalk' ? `${a.rounds || 1} × (${a.runMin || 0} trote + ${a.walkMin || 0} caminata)` : a.type === 'pushups' ? `${a.reps || 0} flexiones` : a.type === 'rope' ? `${a.reps || 0} saltos${a.minutes ? ' · ' + a.minutes + ' min' : ''}` : (a.minutes ? a.minutes + ' min' : '');
-    h += `<div class="actrow"><button class="tapitem grow" data-act="correct" data-arg="${esc(t.label + ' ' + what)}" aria-label="Corregir ${esc(t.label)} en el chat"><span class="row sp nw"><b>${esc(t.label)}</b><span class="num">${fmt(k.gross)} kcal</span></span>
-      <span class="tiny muted" style="display:block">${esc(what)}${a.feel ? ' · ' + esc(a.feel) : ''} · ${k.watchCounted ? 'ya en el reloj' : 'suma al quemado'}</span></button>${c || `<button class="xbtn" data-act="ask" data-arg="${esc(key)}" aria-label="Borrar ${esc(t.label)}">×</button>`}</div>`;
+    h += `<div class="actrow"><button class="tapitem grow" data-act="correct" data-arg="${esc(t.label + ' ' + what)}" aria-label="Corregir ${esc(t.label)} en el chat"><span class="row sp nw"><b>${esc(t.label)}</b><span class="num">${k.watchCounted ? '<span class="tiny muted">en el reloj</span>' : fmt(k.gross) + ' kcal'}</span></span>
+      <span class="tiny muted" style="display:block">${esc(what)}${a.feel ? ' · ' + esc(a.feel) : ''}${k.watchCounted ? '' : ' · suma al quemado'}</span></button>${c || `<button class="xbtn" data-act="ask" data-arg="${esc(key)}" aria-label="Borrar ${esc(t.label)}">×</button>`}</div>`;
     if (a.type === 'football') h += footballBlock(a, rules);
   }
   return h + `</section>`;
@@ -1440,6 +1441,8 @@ GYM POR CHAT: la pestaña Gym es solo lectura; la sesión la llevas tú.
 - "Terminé, el reloj marca Y" → end_session y responde corto: kcal (estimado − reloj = extra), récords y la próxima vez.
 - Foto de una máquina que ya existe ("esta es la prensa") → link_equipment_photo. Máquina nueva → add_equipment con use_attached_photo.
 VIERNES: pregunta por la disponibilidad del finde y guárdala con set_availability.
+RELOJ = VERDAD: Luis se guía SOLO por el contador general del reloj. Si una actividad la contó el reloj, nunca le digas un estimado tuyo de kcal de esa actividad; habla del número del reloj. Pídele el contador general después de cada actividad y guárdalo con set_watch_kcal.
+HOY SIEMPRE AL DÍA: cada vez que registres algo que ya hizo (actividad, sesión, comida, pesaje), revisa RECORDATORIOS ABIERTOS en el mismo turno: descarta con dismiss_nudge lo que ya cumplió y, si quedó una parte pendiente (ej. el gym de la tarde), crea con add_nudge uno nuevo solo con lo pendiente. Nunca dejes en Hoy algo que ya hizo. Un solo recordatorio de plan por día: antes de crear uno nuevo, descarta el anterior.
 TIEMPO DE SESIÓN: lunes y viernes trabaja desde casa y está libre desde las 16:00, así que son sus días largos: sesión de hasta 90 min (la más pesada de la semana o fuerza + cardio). Martes a jueves sale libre ~18:00: sesión de 60 min como máximo, más directa. Si no te dice cuánto tiempo tiene, usa eso sin preguntar; si te dice otro tiempo, usa el suyo.
 SALUD: no prescribes dietas médicas ni diagnosticas. Para preguntas médicas o de suplementos, dile que lo consulte con su médico.
 LÍMITES DE LA APP: si pide una pantalla, botón o función nueva que la app no tiene, dile que se lo pida a Claude Code; tú no puedes cambiar la app.
@@ -1645,8 +1648,9 @@ const TOOL_SPECS = [
         saved = clone(a);
       });
       const k = activityKcal(saved, bodyKg(), cfg('rules')), fs = t === 'football' ? footballStats(saved) : {};
-      toolNote(`${ACT_TYPES[t].label}${k.gross ? ' ~' + k.gross + ' kcal' : ''}`);
-      return { ok: true, kcal: k.gross, added_to_burned: k.extra, source: k.source, match_kcal: fs.watchDelta ?? null, sweat_kg: fs.sweatKg ?? null, water_l: fs.sweatKg > 0 ? [r1(fs.sweatKg * cfg('rules').hydrationPerKg[0]), r1(fs.sweatKg * cfg('rules').hydrationPerKg[1])] : null, typical_match_kcal: typicalMatchKcal() };
+      toolNote(`${ACT_TYPES[t].label}${k.watchCounted ? ' (en el reloj)' : k.gross ? ' ~' + k.gross + ' kcal' : ''}`);
+      const open_nudges = coll('nudges').filter(n => !n.dismissed && n.source === 'chat').map(n => ({ id: n.id, text: n.text }));
+      return { ok: true, watch_counted: !!k.watchCounted, note: k.watchCounted ? 'El reloj ya lo contó: NO le des un estimado de kcal de esta actividad; lo único que cuenta es el contador general del reloj.' : undefined, open_nudges, open_nudges_rule: 'Si esto cumple un recordatorio de open_nudges, descártalo con dismiss_nudge y, si quedó una parte pendiente, crea uno nuevo solo con lo pendiente.', kcal: k.watchCounted ? null : k.gross, added_to_burned: k.extra, source: k.source, match_kcal: fs.watchDelta ?? null, sweat_kg: fs.sweatKg ?? null, water_l: fs.sweatKg > 0 ? [r1(fs.sweatKg * cfg('rules').hydrationPerKg[0]), r1(fs.sweatKg * cfg('rules').hydrationPerKg[1])] : null, typical_match_kcal: typicalMatchKcal() };
     } },
   { name: 'add_equipment', description: 'Agrega equipo de su gym (o available:false para "NO lo tengo", con substitutes). use_attached_photo guarda la foto adjunta. exercises: ejercicios que permite (pattern: ' + Object.keys(PATTERNS).join(',') + ').', inputSchema: { type: 'object', properties: { name: S_STR, kind: { type: 'string', enum: ['machine', 'free', 'bench', 'cardio', 'attachment', 'court', 'other'] }, available: { type: 'boolean' }, increment_kg: S_NUM, notes: S_STR, substitutes: { type: 'array', items: S_STR }, use_attached_photo: { type: 'boolean' }, exercises: { type: 'array', items: { type: 'object', properties: { name: S_STR, pattern: { type: 'string', enum: Object.keys(PATTERNS) }, muscles: { type: 'array', items: S_STR }, vigorous: { type: 'boolean' }, goal_tags: { type: 'array', items: S_STR } }, required: ['name', 'pattern'] } } }, required: ['name'] },
     execute: async (x) => {
