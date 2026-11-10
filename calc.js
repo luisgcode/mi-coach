@@ -300,6 +300,10 @@ const TEMPLATES = {
     slots: [{ p: ['hip_thrust'], anchor: true }, { p: ['leg_press', 'squat'], anchor: true }, { p: ['lunge'] }, { p: ['hinge', 'swing', 'leg_curl'] }, { p: ['abduction', 'glute_iso'] }, { p: ['jump', 'throw'] }] },
   B: { title: 'Gym B · Core, rotación y tren superior', goal: 'fuerza', heavyLegs: false, focus: ['fuerza', 'core'],
     slots: [{ p: ['pulldown'], anchor: true }, { p: ['press'], anchor: true }, { p: ['row'] }, { p: ['rotation', 'throw'] }, { p: ['core'] }, { p: ['press', 'row'] }] },
+  P: { title: 'Gym P · Empuje: pecho, hombro y tríceps', goal: 'fuerza', heavyLegs: false, split: true, focus: ['fuerza'],
+    slots: [{ p: ['press'], re: /inclinad|banca|pecho/, anchor: true }, { p: ['press'], re: /hombro|militar/ }, { p: ['press'], re: /press con mancuerna|press inclinado|press de banca|flexion/ }, { p: ['press'], re: /apertura|fly/ }, { p: ['press'], re: /tr[ií]ceps|franc/ }, { p: ['core'] }] },
+  J: { title: 'Gym J · Jalón: espalda y bíceps + core', goal: 'fuerza', heavyLegs: false, split: true, focus: ['fuerza', 'core'],
+    slots: [{ p: ['pulldown'], anchor: true }, { p: ['row'] }, { p: ['pulldown', 'row'] }, { p: ['curl'] }, { p: ['curl', 'row'] }, { p: ['core', 'rotation'] }] },
   C: { title: 'Gym C · Glúteos + intervalos para fútbol', goal: 'gluteos', heavyLegs: true, intervals: true, focus: ['gluteos', 'resistencia'],
     slots: [{ p: ['hip_thrust', 'lunge', 'swing'] }, { p: ['hinge'], anchor: true }, { p: ['abduction', 'glute_iso', 'lunge', 'leg_curl'] }, { p: ['core'] }] }
 };
@@ -395,7 +399,9 @@ function buildSession(args) {
   const slots = home ? HOME_SLOTS : T.slots;
   slots.forEach((slot, si) => {
     if (chosen.length >= slotsN) return;
-    const cand = usable.filter(e => slot.p.includes(e.pattern) && !chosen.includes(e)).sort((a, b) => a.id < b.id ? -1 : 1);
+    const cand0 = usable.filter(e => slot.p.includes(e.pattern) && !chosen.includes(e));
+    const cand = slot.re && cand0.some(e => slot.re.test(norm(e.name))) ? cand0.filter(e => slot.re.test(norm(e.name))) : cand0;
+    cand.sort((a, b) => a.id < b.id ? -1 : 1);
     if (!cand.length) return;
     let pick;
     if (slot.anchor && !args.surprise) pick = cand.find(e => e.anchor) || cand.slice().sort((a, b) => logs(b) - logs(a))[0];
@@ -410,7 +416,7 @@ function buildSession(args) {
   const isPush = e => PUSH.includes(e.pattern), isPull = e => PULL.includes(e.pattern);
   const pullPool = usable.filter(e => isPull(e) && !chosen.includes(e));
   const pushPool = usable.filter(e => isPush(e) && !chosen.includes(e));
-  for (let guard = 0; guard < 6; guard++) {
+  for (let guard = 0; guard < (T.split ? 0 : 6); guard++) {
     const pu = chosen.filter(isPush).length, pl = chosen.filter(isPull).length;
     if (pu - pl > 1) { const idx = chosen.map((e, i) => isPush(e) && !anchorIds.has(e.id) ? i : -1).filter(i => i >= 0).pop(); if (idx == null) break; if (pullPool.length) chosen[idx] = pullPool.shift(); else { chosen.splice(idx, 1); warnings.push('Quité un empuje para no desbalancear: me faltan ejercicios de jalón.'); } }
     else if (pl - pu > 1) { const idx = chosen.map((e, i) => isPull(e) && !anchorIds.has(e.id) ? i : -1).filter(i => i >= 0).pop(); if (idx == null) break; if (pushPool.length) chosen[idx] = pushPool.shift(); else { chosen.splice(idx, 1); warnings.push('Quité un jalón para balancear con los empujes.'); } }
