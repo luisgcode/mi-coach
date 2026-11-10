@@ -477,7 +477,14 @@ document.addEventListener('click', ev => {
 document.addEventListener('input', ev => {
   const el = ev.target; const b = el.dataset && el.dataset.bind;
   if (b) setPath(ui, b, el.type === 'checkbox' ? el.checked : el.value);
+  if (el.id === 'chatIn') growChatIn(el);
 });
+// The message box grows with the text (up to 40 % of the screen, then it scrolls inside).
+function growChatIn(el = document.getElementById('chatIn')) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight + 2, Math.round(window.innerHeight * 0.4)) + 'px';
+}
 document.addEventListener('change', ev => {
   const el = ev.target;
   if (el.dataset && el.dataset.bind && el.type === 'checkbox') setPath(ui, el.dataset.bind, el.checked);
@@ -488,12 +495,12 @@ function setPath(obj, path, val) { const ks = path.split('.'); let o = obj; for 
 function getPath(obj, path) { return path.split('.').reduce((o, k) => o == null ? o : o[k], obj); }
 function val(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 
-ACTIONS.tab = t => { ui.tab = t; lsSet('tab', t); if (t === 'chat') chatStick = true; render(); if (t !== 'chat') window.scrollTo(0, 0); $('#view').focus({ preventScroll: true }); };
+ACTIONS.tab = t => { ui.tab = t; lsSet('tab', t); if (t === 'chat') { chatStick = true; ui.chat.showAllMsgs = false; } render(); if (t !== 'chat') window.scrollTo(0, 0); $('#view').focus({ preventScroll: true }); };
 // Chat opens at the latest message and follows new ones, unless he scrolled up to read (then it stays put).
 let chatStick = true;
 const chatToBottom = () => { if (ui.tab === 'chat' && !ui.chat.viewDate && chatStick) requestAnimationFrame(() => window.scrollTo(0, document.documentElement.scrollHeight)); };
 window.addEventListener('scroll', () => { if (ui.tab === 'chat') chatStick = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160; }, { passive: true });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ui.tab === 'chat') { chatStick = true; chatToBottom(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ui.tab === 'chat') { chatStick = true; if (ui.chat.showAllMsgs) { ui.chat.showAllMsgs = false; render(); } chatToBottom(); } });
 window.addEventListener('load', () => { chatStick = true; chatToBottom(); });
 document.addEventListener('load', e => { if (e.target && e.target.tagName === 'IMG' && e.target.closest('#msgs')) chatToBottom(); }, true);
 ACTIONS.openSheet = k => { ui.sheet = k; render(); };
@@ -525,7 +532,7 @@ function render() {
   }
   $('#sheetHost').innerHTML = ui.sheet ? viewSheet(ui.sheet) : '';
   if (ui.tab === 'progreso') bindCharts();
-  if (ui.tab === 'chat') chatToBottom();
+  if (ui.tab === 'chat') { growChatIn(); chatToBottom(); }
   chatEnsureSubs();
 }
 
@@ -1822,7 +1829,7 @@ async function sendChat() {
   const text = (c.draft || '').trim(), imgs = c.imgs;
   if ((!text && !imgs.length) || c.busy) return;
   const d = today();
-  c.viewDate = null; c.showDays = false; chatStick = true;
+  c.viewDate = null; c.showDays = false; c.showAllMsgs = false; chatStick = true;
   c.lastImgs = imgs; c.imgs = []; c.draft = '';
   c.local = []; // old error lines go away with a new message
   const userId = chatPost({ role: 'user', text, imgCount: imgs.length });
@@ -1948,15 +1955,22 @@ function viewChat() {
   h += `</section><div class="msgs" id="msgs" aria-live="polite">`;
   if (isToday && !msgs.length && !c.local.length) h += `<div class="chips">${QUICK.map(q => `<button class="chip" data-act="chatQuick" data-arg="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
   if (!isToday && !msgs.length) h += `<p class="small muted">Cargando…</p>`;
-  for (const m of msgs) h += chatBubble(m);
+  // Only the latest messages; the older ones of the day stay behind a button.
+  const hidden = c.showAllMsgs ? 0 : Math.max(0, msgs.length - CHAT_VISIBLE);
+  if (hidden) h += `<button class="linkbtn small" style="align-self:center;margin:2px 0 4px" data-act="chatMore">Ver ${hidden} mensaje${hidden === 1 ? '' : 's'} anterior${hidden === 1 ? '' : 'es'}</button>`;
+  else if (c.showAllMsgs && msgs.length > CHAT_VISIBLE) h += `<button class="linkbtn small" style="align-self:center;margin:2px 0 4px" data-act="chatLess">Mostrar solo los últimos</button>`;
+  for (const m of msgs.slice(hidden)) h += chatBubble(m);
   if (isToday) for (const m of c.local) h += chatBubble(m);
   h += `</div>`;
   if (!isToday) return h;
   h += `<div class="composer">`;
   if (c.imgs.length) h += `<p class="tiny ink2" style="margin:0 0 4px">📷 ${c.imgs.length} foto(s) lista(s) <button class="sm ghost" data-act="chatClearImgs">Quitar</button></p>`;
-  h += `<div class="row nw" style="align-items:flex-end">${aiState.images ? `<button class="iconbtn" data-act="chatPhoto" aria-label="Adjuntar foto"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>` : ''}${SpeechRec && !c.busy ? `<button class="iconbtn${voice.on ? ' rec' : ''}" data-act="chatVoice" aria-label="${voice.on ? 'Terminar y enviar' : 'Hablar'}" aria-pressed="${voice.on}">${voice.on ? `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>` : `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`}</button>` : ''}<div class="grow"><label class="sr" for="chatIn">Mensaje</label><textarea id="chatIn" rows="1" style="min-height:44px" data-bind="chat.draft" placeholder="${voice.on ? 'Te escucho… toca ■ para enviar' : 'Escríbeme…'}">${esc(c.draft)}</textarea></div>${c.busy ? `<button data-act="chatStop">Parar</button>` : `<button class="primary" data-act="chatSend">Enviar</button>`}</div></div>`;
+  h += `<div class="row nw" style="align-items:flex-end">${aiState.images ? `<button class="iconbtn" data-act="chatPhoto" aria-label="Adjuntar foto"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>` : ''}${SpeechRec && !c.busy ? `<button class="iconbtn${voice.on ? ' rec' : ''}" data-act="chatVoice" aria-label="${voice.on ? 'Terminar y enviar' : 'Hablar'}" aria-pressed="${voice.on}">${voice.on ? `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>` : `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`}</button>` : ''}<div class="grow"><label class="sr" for="chatIn">Mensaje</label><textarea id="chatIn" rows="1" style="min-height:44px;resize:none;overflow-y:auto" data-bind="chat.draft" placeholder="${voice.on ? 'Te escucho… toca ■ para enviar' : 'Escríbeme…'}">${esc(c.draft)}</textarea></div>${c.busy ? `<button data-act="chatStop">Parar</button>` : `<button class="primary" data-act="chatSend">Enviar</button>`}</div></div>`;
   return h;
 }
+const CHAT_VISIBLE = 10;
+ACTIONS.chatMore = () => { ui.chat.showAllMsgs = true; chatStick = false; render(); };
+ACTIONS.chatLess = () => { ui.chat.showAllMsgs = false; chatStick = true; render(); };
 ACTIONS.chatDays = () => { ui.chat.showDays = !ui.chat.showDays; render(); };
 ACTIONS.chatDay = d => { ui.chat.viewDate = d || null; ui.chat.showDays = false; render(); };
 ACTIONS.chatSend = () => sendChat();
@@ -1973,7 +1987,7 @@ ACTIONS.chatVoice = () => {
     let interim = '';
     for (let i = ev.resultIndex; i < ev.results.length; i++) { const t = ev.results[i][0].transcript; if (ev.results[i].isFinal) voice.finalTxt = (voice.finalTxt + ' ' + t).trim(); else interim += t; }
     ui.chat.draft = (voiceText() + (interim ? ' ' + interim : '')).trim();
-    const el = document.getElementById('chatIn'); if (el) el.value = ui.chat.draft;
+    const el = document.getElementById('chatIn'); if (el) { el.value = ui.chat.draft; growChatIn(el); }
   };
   r.onerror = ev => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') toast('Activa el micrófono para esta app en Ajustes del iPhone (y el Dictado en Teclado).'); else if (ev.error !== 'no-speech' && ev.error !== 'aborted') toast('No te escuché bien. Intenta otra vez.'); };
   r.onend = () => {
