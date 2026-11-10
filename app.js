@@ -488,7 +488,14 @@ function setPath(obj, path, val) { const ks = path.split('.'); let o = obj; for 
 function getPath(obj, path) { return path.split('.').reduce((o, k) => o == null ? o : o[k], obj); }
 function val(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 
-ACTIONS.tab = t => { ui.tab = t; lsSet('tab', t); render(); window.scrollTo(0, 0); $('#view').focus({ preventScroll: true }); };
+ACTIONS.tab = t => { ui.tab = t; lsSet('tab', t); if (t === 'chat') chatStick = true; render(); if (t !== 'chat') window.scrollTo(0, 0); $('#view').focus({ preventScroll: true }); };
+// Chat opens at the latest message and follows new ones, unless he scrolled up to read (then it stays put).
+let chatStick = true;
+const chatToBottom = () => { if (ui.tab === 'chat' && !ui.chat.viewDate && chatStick) requestAnimationFrame(() => window.scrollTo(0, document.documentElement.scrollHeight)); };
+window.addEventListener('scroll', () => { if (ui.tab === 'chat') chatStick = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160; }, { passive: true });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ui.tab === 'chat') { chatStick = true; chatToBottom(); } });
+window.addEventListener('load', () => { chatStick = true; chatToBottom(); });
+document.addEventListener('load', e => { if (e.target && e.target.tagName === 'IMG' && e.target.closest('#msgs')) chatToBottom(); }, true);
 ACTIONS.openSheet = k => { ui.sheet = k; render(); };
 ACTIONS.closeSheet = () => { ui.sheet = null; render(); };
 ACTIONS.ask = (k) => { ui.confirm = k; render(); };
@@ -518,7 +525,7 @@ function render() {
   }
   $('#sheetHost').innerHTML = ui.sheet ? viewSheet(ui.sheet) : '';
   if (ui.tab === 'progreso') bindCharts();
-  if (ui.tab === 'chat') { const m = $('#msgs'); if (m && !ui.chat.viewDate) m.scrollTop = m.scrollHeight; }
+  if (ui.tab === 'chat') chatToBottom();
   chatEnsureSubs();
 }
 
@@ -1780,7 +1787,7 @@ async function sendChat() {
   const text = (c.draft || '').trim(), imgs = c.imgs;
   if ((!text && !imgs.length) || c.busy) return;
   const d = today();
-  c.viewDate = null; c.showDays = false;
+  c.viewDate = null; c.showDays = false; chatStick = true;
   c.lastImgs = imgs; c.imgs = []; c.draft = '';
   c.local = []; // old error lines go away with a new message
   const userId = chatPost({ role: 'user', text, imgCount: imgs.length });
@@ -1794,7 +1801,7 @@ async function sendChat() {
   const turns = chatTurns(chatMessages(d), 10);
   const input = [{ role: 'user', content: 'CONTEXTO ACTUAL (léelo, no lo repitas):\n' + buildContext() }, ...turns];
   try {
-    const opts = { fresh: true, system: SYSTEM_PROMPT, signal: c.ctl.signal, tier: 'default', effort: 'medium', onText: ({ text: t }) => { aiMsg.text = t; const el = document.getElementById('m-' + aiMsg.id); if (el) el.textContent = t; } };
+    const opts = { fresh: true, system: SYSTEM_PROMPT, signal: c.ctl.signal, tier: 'default', effort: 'medium', onText: ({ text: t }) => { aiMsg.text = t; const el = document.getElementById('m-' + aiMsg.id); if (el) el.textContent = t; chatToBottom(); } };
     if (aiState.tools) { opts.tools = TOOL_DEFS; opts.handlers = TOOL_HANDLERS; }
     if (imgs.length) opts.images = imgs;
     const r = await ai.ask(input, opts);
