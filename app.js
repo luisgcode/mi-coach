@@ -1079,6 +1079,21 @@ function swapItem(s, i) {
   s.items[i] = { exId: alt.id, name: alt.name, pattern: alt.pattern, vigorous: !!alt.vigorous, swappedFrom: it.name, planned: { sets, reps, kg: null, w: null, unit: 'kg', list: Array.from({ length: sets }, () => ({ reps, kg: null, w: null, unit: 'kg' })) }, why: `En lugar de ${it.name}. Elige un peso con el que te sobren 2 reps.`, sets: Array.from({ length: sets }, () => ({ reps: '', w: '', unit: 'kg', done: false })), feel: null };
   return alt;
 }
+// Exercise by name: from the library, or created on the spot (its "Cómo se hace" is generated after the chat turn).
+async function exerciseByName(x, fallbackPattern) {
+  const n = norm(x.name);
+  let ex = exArr().find(e => e.id === x.name || norm(e.name) === n) || exArr().find(e => norm(e.name).includes(n) || n.includes(norm(e.name)));
+  if (ex && ex.blocked) throw new Error(ex.name + ' está bloqueado');
+  if (ex) return ex;
+  const eqIds = (x.equipment || []).map(q => { const qn = norm(q); const e = eqArr().find(e2 => e2.id === q || norm(e2.name).includes(qn) || qn.includes(norm(e2.name))); return e && e.id; }).filter(Boolean);
+  const id = slug(x.name), doc = { name: String(x.name).slice(0, 80), equipmentIds: eqIds, pattern: x.pattern || fallbackPattern || 'otro', muscles: (x.muscles || []).map(String).slice(0, 6), source: 'chat', createdAt: new Date().toISOString() };
+  await writeDoc('exercises/' + id, cur => cur || doc);
+  return { id, ...doc };
+}
+function newItem(ex, sets, reps, note) {
+  sets = Math.max(1, Math.min(6, Math.round(num(sets) || 3))); reps = Math.max(1, Math.round(num(reps) || DEFAULT_REPS[ex.pattern] || 10));
+  return { exId: ex.id, name: ex.name, pattern: ex.pattern, vigorous: !!ex.vigorous, planned: { sets, reps, kg: null, w: null, unit: 'kg', list: Array.from({ length: sets }, () => ({ reps, kg: null, w: null, unit: 'kg' })) }, why: note || 'Elige un peso con el que te sobren 2 reps.', sets: Array.from({ length: sets }, () => ({ reps: '', w: '', unit: 'kg', done: false })), feel: null };
+}
 ACTIONS.swapEx = i => {
   const s = activeSession(); if (!s) return; ui.painOffer = null;
   let alt = null;
@@ -1448,6 +1463,8 @@ GYM POR CHAT: la pestaña Gym es solo lectura; la sesión la llevas tú.
 - Foto de una máquina que ya existe ("esta es la prensa") → link_equipment_photo. Máquina nueva → add_equipment con use_attached_photo.
 VIERNES: pregunta por la disponibilidad del finde y guárdala con set_availability.
 BALANCE: cuando le muestres cómo va el día, usa esta tabla (Ítem | Kcal), igual que la pantalla Hoy: 🔥 BMR, 🔥 Smartwatch (contador general), 🔥 ejercicios que el reloj no contó (solo si hay), **Total quemado**, cada comida con sus kcal, **Total consumido**, ✅ **Déficit actual**; debajo, la meta de hoy y la proteína.
+EJERCICIOS EN LA TARJETA: todo ejercicio que le recomiendes durante una sesión (cambio o extra) va por swap_exercise (con el campo to si eliges uno concreto, aunque no esté en su biblioteca) o add_session_exercise. La tarjeta lo muestra y al tocarlo se abre "Cómo se hace". En el chat, una línea: qué cambió y por qué. Nunca escribas el ejercicio como texto con pasos ni pongas enlaces (nada de Google).
+NOMBRES CON DESCRIPCIÓN: Luis no conoce máquinas, agarres ni accesorios por su nombre. Cada vez que nombres una máquina, un banco, un agarre o un accesorio, pon entre paréntesis cómo se ve y cómo se usa, para que lo ubique sin buscar en Google. Ej.: "curl femoral acostado (la máquina donde te acuestas boca abajo y doblas las piernas hacia atrás, levantando un rodillo con los talones)", "cuerda (dos tiras gruesas de cuerda negra unidas al medio, se engancha a la polea)". Igual en ejercicios nuevos.
 RELOJ = VERDAD: Luis se guía SOLO por el contador general del reloj. Si una actividad la contó el reloj, nunca le digas un estimado tuyo de kcal de esa actividad; habla del número del reloj. Pídele el contador general después de cada actividad y guárdalo con set_watch_kcal.
 HOY SIEMPRE AL DÍA: cada vez que registres algo que ya hizo (actividad, sesión, comida, pesaje), revisa RECORDATORIOS ABIERTOS en el mismo turno: descarta con dismiss_nudge lo que ya cumplió y, si quedó una parte pendiente (ej. el gym de la tarde), crea con add_nudge uno nuevo solo con lo pendiente. Nunca dejes en Hoy algo que ya hizo. Un solo recordatorio de plan por día: antes de crear uno nuevo, descarta el anterior.
 TIEMPO DE SESIÓN: lunes y viernes trabaja desde casa y está libre desde las 16:00, así que son sus días largos: sesión de hasta 90 min (la más pesada de la semana o fuerza + cardio). Martes a jueves sale libre ~18:00: sesión de 60 min como máximo, más directa. Si no te dice cuánto tiempo tiene, usa eso sin preguntar; si te dice otro tiempo, usa el suyo.
@@ -1512,7 +1529,7 @@ async function generateHowTo(ids) {
   ui.howBusy = true; schedule();
   try {
     const list = batch.map(id => { const e = cache.get('exercises/' + id); const eq = (e.equipmentIds || []).map(q => (cache.get('equipment/' + q) || {}).name).filter(Boolean).join(' + ') || 'peso corporal'; return `- id "${id}": ${e.name} · equipo: ${eq} · patrón: ${e.pattern}${e.notes ? ' · nota: ' + e.notes : ''}`; }).join('\n');
-    const prompt = `Escribe guías breves de técnica, en español (de tú), para estos ejercicios de Luis (${[cfg('profile').age ? cfg('profile').age + ' años' : '', cfg('profile').injuries ? 'lesiones: ' + cfg('profile').injuries : '', (cfg('profile').priorities || []).length ? 'prioridad: ' + cfg('profile').priorities.join(', ') : '', 'juega fútbol'].filter(Boolean).join(', ')}). Cada máquina puede usarse distinto según el objetivo del día: incluye variantes por objetivo (por ejemplo prensa para glúteos: pies altos y abiertos; para cuádriceps: pies bajos; hip thrust para glúteos: retroversión pélvica y pausa de 1 s arriba).
+    const prompt = `Escribe guías breves de técnica, en español (de tú). Luis no conoce las máquinas ni los agarres por nombre: cada vez que nombres una máquina, banco, agarre o accesorio, describe entre paréntesis cómo se ve y cómo se usa. Ejercicios de Luis (${[cfg('profile').age ? cfg('profile').age + ' años' : '', cfg('profile').injuries ? 'lesiones: ' + cfg('profile').injuries : '', (cfg('profile').priorities || []).length ? 'prioridad: ' + cfg('profile').priorities.join(', ') : '', 'juega fútbol'].filter(Boolean).join(', ')}). Cada máquina puede usarse distinto según el objetivo del día: incluye variantes por objetivo (por ejemplo prensa para glúteos: pies altos y abiertos; para cuádriceps: pies bajos; hip thrust para glúteos: retroversión pélvica y pausa de 1 s arriba).
 ${list}
 Responde SOLO JSON con un objeto por id: {"<id>":{"setup":["2-3 frases cortas de preparación"],"execution":["2-3 frases cortas de ejecución"],"variants":{"gluteos":"…","cuadriceps":"…","potencia":"…","fuerza":"…","resistencia":"…"},"mistakes":["2-3 errores comunes"],"tempo":"ej. 2 s bajar, 1 s pausa, subir rápido"}}. Incluye solo las variantes que tengan sentido para ese ejercicio. Frases de máximo 15 palabras.`;
     const r = await ai.json(prompt, { tier: 'default' });
@@ -1579,18 +1596,36 @@ const TOOL_SPECS = [
     } },
   { name: 'set_session_watch', description: 'Guarda la lectura del contador general del reloj al empezar (phase start) o al terminar (phase end) la sesión de gym de hoy.', inputSchema: { type: 'object', properties: { phase: { type: 'string', enum: ['start', 'end'] }, kcal: S_NUM }, required: ['phase', 'kcal'] },
     execute: async (x) => { const s = todaySession(); if (!s) throw new Error('no hay sesión hoy; usa start_session'); const k = num(x.kcal); if (k == null) throw new Error('kcal inválidas'); await writeSess(s.id, c => { c[x.phase === 'end' ? 'watchEnd' : 'watchStart'] = k; }); toolNote(`Reloj ${x.phase === 'end' ? 'al terminar' : 'al empezar'}: ${k}`); const kk = sessionKcal(cache.get('sessions/' + s.id), bodyKg(), cfg('rules'), exById()); return { ok: true, estimate: kk.estimate, watch_delta: kk.watchDelta, extra: kk.extra }; } },
-  { name: 'swap_exercise', description: 'Cambia un ejercicio de la sesión de hoy por el mejor sustituto con su equipo (elige tú, sin preguntar). block true si le dolió o no le gusta (lo bloquea para siempre).', inputSchema: { type: 'object', properties: { exercise: S_STR, block: { type: 'boolean' }, reason: S_STR }, required: ['exercise'] },
+  { name: 'swap_exercise', description: 'Cambia un ejercicio de la sesión de hoy. Sin `to`, la app elige el mejor sustituto de su biblioteca. Con `to` (nombre del ejercicio que tú o él eligen, aunque sea nuevo: se crea en su biblioteca con su guía "Cómo se hace"), pon ese. sets/reps del nuevo, equipment = nombres de su equipo que usa, pattern y muscles si es nuevo. block true si le dolió o no le gusta (lo bloquea para siempre). El ejercicio aparece en la tarjeta de la sesión: NO lo escribas como texto ni con enlaces.', inputSchema: { type: 'object', properties: { exercise: S_STR, to: S_STR, sets: S_NUM, reps: S_NUM, equipment: { type: 'array', items: S_STR }, pattern: S_STR, muscles: { type: 'array', items: S_STR }, block: { type: 'boolean' }, reason: S_STR }, required: ['exercise'] },
     execute: async (x) => {
       const s = activeSession(); if (!s) throw new Error('no hay sesión en curso');
       const n = norm(x.exercise), i = (s.items || []).findIndex(it => it.exId === x.exercise || norm(it.name).includes(n) || n.includes(norm(it.name)));
       if (i < 0) throw new Error('ese ejercicio no está en la sesión de hoy');
       const old = s.items[i];
       if (x.block) await writeDoc('exercises/' + old.exId, cur => cur ? { ...cur, blocked: true, blockedReason: x.reason || 'dolor', blockedAt: today() } : null);
+      if (x.to) {
+        const ex = await exerciseByName({ name: String(x.to), equipment: x.equipment, pattern: x.pattern, muscles: x.muscles }, old.pattern);
+        if (s.items.some((it, k) => k !== i && it.exId === ex.id)) throw new Error(ex.name + ' ya está en la sesión');
+        await writeSess(s.id, cur => { const it = newItem(ex, x.sets || old.planned.sets, x.reps, `En lugar de ${old.name}. Elige un peso con el que te sobren 2 reps.`); it.swappedFrom = old.name; cur.items[i] = it; });
+        if (!cache.get('exercises/' + ex.id)?.howto) howQueue.push(ex.id);
+        toolNote(`${old.name} → ${ex.name}`); chatCard(s.id);
+        return { replaced: old.name, substitute: ex.name, new_in_library: ex.source === 'chat' && !cache.get('exercises/' + ex.id)?.howto, blocked: !!x.block, shown_in_card: true };
+      }
       let alt = null; await writeSess(s.id, cur => { alt = swapItem(cur, i); return alt ? undefined : false; });
       if (!alt) { await writeSess(s.id, cur => { cur.items.splice(i, 1); }); toolNote(`Quité ${old.name}`); return { removed: old.name, substitute: null }; }
       if (!cache.get('exercises/' + alt.id)?.howto) howQueue.push(alt.id);
       toolNote(`${old.name} → ${alt.name}`); chatCard(s.id);
       return { replaced: old.name, substitute: alt.name, blocked: !!x.block };
+    } },
+  { name: 'add_session_exercise', description: 'Agrega un ejercicio a la sesión de hoy (de su biblioteca o nuevo: se crea con su guía "Cómo se hace"). Aparece en la tarjeta de la sesión: NO lo escribas como texto ni con enlaces.', inputSchema: { type: 'object', properties: { exercise: S_STR, sets: S_NUM, reps: S_NUM, equipment: { type: 'array', items: S_STR }, pattern: S_STR, muscles: { type: 'array', items: S_STR }, note: S_STR }, required: ['exercise'] },
+    execute: async (x) => {
+      const s = activeSession(); if (!s) throw new Error('no hay sesión en curso');
+      const ex = await exerciseByName({ name: String(x.exercise), equipment: x.equipment, pattern: x.pattern, muscles: x.muscles });
+      if ((s.items || []).some(it => it.exId === ex.id)) throw new Error(ex.name + ' ya está en la sesión');
+      await writeSess(s.id, cur => { cur.items = (cur.items || []).concat(newItem(ex, x.sets, x.reps, x.note)); });
+      if (!cache.get('exercises/' + ex.id)?.howto) howQueue.push(ex.id);
+      toolNote(`+ ${ex.name}`); chatCard(s.id);
+      return { added: ex.name, shown_in_card: true };
     } },
   { name: 'end_session', description: 'Cierra la sesión de gym de hoy. watch_kcal = contador general del reloj al terminar. Calcula kcal (estimado − lo que vio el reloj), récords y la recomendación para la próxima vez.', inputSchema: { type: 'object', properties: { watch_kcal: S_NUM, cardio_done: { type: 'boolean' }, finisher_done: { type: 'boolean' }, finisher_score: S_NUM } },
     execute: async (x) => {
@@ -1896,7 +1931,11 @@ function chatBubble(m) {
   const cls = m.role === 'user' ? 'me' : m.role === 'tool' ? 'tool' : m.role === 'err' ? 'err' : 'ai';
   const n = (m.imagePaths || []).length || num(m.imgCount) || 0;
   const pics = (m.imagePaths || []).length ? `<div class="row" style="gap:6px;margin-top:${m.text ? 6 : 0}px">${m.imagePaths.map(pth => `<img class="thumb" src="${esc(files.urlFor(pth))}" alt="Foto enviada" loading="lazy">`).join('')}</div>` : n ? `<div class="tiny">📷 ${n} foto(s)</div>` : '';
-  return `<div class="msg ${cls}" ${m.id && m.role === 'ai' ? `id="m-${m.id}"` : ''}>${esc(m.text)}${pics}</div>`;
+  return `<div class="msg ${cls}" ${m.id && m.role === 'ai' ? `id="m-${m.id}"` : ''}>${cls === 'ai' ? mdLite(m.text) : esc(m.text)}${pics}</div>`;
+}
+// Bold only; links show their text, never the URL.
+function mdLite(t) {
+  return esc(String(t || '').replace(/\[([^\]]+)\]\((?:https?:[^)\s]+)\)/g, '$1')).replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
 }
 function viewChat() {
   const c = ui.chat;
