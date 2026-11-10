@@ -996,7 +996,7 @@ function howToBlock(ex, it, s, forceOpen) {
   const focus = (s && s.focus) || [];
   let h = `<details class="how" ${open ? 'open' : ''}><summary>Cómo se hace</summary>${exGuidePics(ex, ex.pattern || it.pattern)}`;
   const eq = eqArr().find(q => (ex.equipmentIds || []).includes(q.id) && q.photoId);
-  if (eq) h += `<img class="photo" src="${esc(files.urlFor(eq.photoId))}" alt="Foto de tu ${esc(eq.name)}" loading="lazy">`;
+  if (eq) h += `<p class="tiny muted" style="margin:8px 0 2px">📷 La máquina en tu gym (tu foto):</p><img class="photo" src="${esc(files.urlFor(eq.photoId))}" alt="Foto de tu ${esc(eq.name)}" loading="lazy">`;
   if (ho) {
     if ((ho.setup || []).length) h += `<b class="small">Preparación</b><ul class="small">${ho.setup.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
     if ((ho.execution || []).length) h += `<b class="small">Ejecución</b><ul class="small">${ho.execution.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
