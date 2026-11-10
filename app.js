@@ -842,6 +842,10 @@ function availEquipment() { return eqArr().filter(e => e.available !== false); }
 function missingEquipment() { return eqArr().filter(e => e.available === false); }
 function exUsable(e) { const ids = new Set(availEquipment().map(q => q.id)); return (e.equipmentIds || []).every(id => ids.has(id)); }
 function tomorrowFootball() { const p = cfg('plan').days[DOW_KEYS[(tzNow().dow + 1) % 7]]; return !!(p && p.kind === 'football'); }
+// Football yesterday: from the plan or from a logged match.
+function yesterdayFootball() { const p = cfg('plan').days[DOW_KEYS[(tzNow().dow + 6) % 7]]; const y = dayOf(addDays(today(), -1)) || {}; return !!((p && p.kind === 'football') || (y.activities || []).some(a => a.type === 'football')); }
+// Legs (A or C) never the day before or after football: those days get B.
+function legsOk(tpl) { return !(TEMPLATES[tpl] && TEMPLATES[tpl].heavyLegs && (tomorrowFootball() || yesterdayFootball())); }
 function previewSession() {
   const T = tzNow(), plan = cfg('plan').days[DOW_KEYS[T.dow]] || {};
   return buildSession({ template: decidedTemplate(), location: ui.gymLocation, timeMin: ui.gymTime || defaultSessionMin(), energy: ui.gymEnergy, exercises: exArr(), equipment: eqArr(), sessions: sessionsArr(), rules: cfg('rules'), date: T.date, tomorrowFootball: tomorrowFootball(), lastRunWalk: lastRunWalk() });
@@ -850,13 +854,14 @@ function previewSession() {
 // ONE decision: the plan's template, or (off-plan day) the gym day not yet done this week.
 function decidedTemplate() {
   const T = tzNow(), plan = cfg('plan').days[DOW_KEYS[T.dow]] || {};
-  if (plan.kind === 'gym' && plan.template) return plan.template;
+  if (plan.kind === 'gym' && plan.template && legsOk(plan.template)) return plan.template;
   const ws = weekStart(T.date), done = new Set(sessionsArr().filter(s => s.status === 'done' && s.date >= ws).map(s => s.template));
-  return ['A', 'C', 'B'].find(k => !done.has(k) && !(TEMPLATES[k].heavyLegs && tomorrowFootball())) || 'B';
+  return ['A', 'C', 'B'].find(k => !done.has(k) && legsOk(k)) || 'B';
 }
 function startSessionFrom(o) {
   const T = tzNow(), d = T.date;
-  const p = buildSession({ template: o.template || decidedTemplate(), location: o.location || ui.gymLocation, timeMin: o.timeMin || ui.gymTime || defaultSessionMin(), energy: o.energy || ui.gymEnergy, exercises: exArr(), equipment: eqArr(), sessions: sessionsArr(), rules: cfg('rules'), date: d, tomorrowFootball: tomorrowFootball(), lastRunWalk: lastRunWalk(), surprise: o.surprise || 0 });
+  const tpl = o.template && legsOk(o.template) ? o.template : decidedTemplate();
+  const p = buildSession({ template: tpl, location: o.location || ui.gymLocation, timeMin: o.timeMin || ui.gymTime || defaultSessionMin(), energy: o.energy || ui.gymEnergy, exercises: exArr(), equipment: eqArr(), sessions: sessionsArr(), rules: cfg('rules'), date: d, tomorrowFootball: tomorrowFootball(), lastRunWalk: lastRunWalk(), surprise: o.surprise || 0 });
   if (!p.items.length && !p.finisher && !p.cardio) return p;
   const n = sessionsArr().filter(s => s.date === d).length;
   const id = d + '-' + 'abcdefghij'[Math.min(9, n)];
@@ -1474,7 +1479,7 @@ EJERCICIOS EN LA TARJETA: todo ejercicio que le recomiendes durante una sesión 
 NOMBRES CON DESCRIPCIÓN: Luis no conoce máquinas, agarres ni accesorios por su nombre. Cada vez que nombres una máquina, un banco, un agarre o un accesorio, pon entre paréntesis cómo se ve y cómo se usa, para que lo ubique sin buscar en Google. Ej.: "curl femoral acostado (la máquina donde te acuestas boca abajo y doblas las piernas hacia atrás, levantando un rodillo con los talones)", "cuerda (dos tiras gruesas de cuerda negra unidas al medio, se engancha a la polea)". Igual en ejercicios nuevos.
 RELOJ = VERDAD: Luis se guía SOLO por el contador general del reloj. Si una actividad la contó el reloj, nunca le digas un estimado tuyo de kcal de esa actividad; habla del número del reloj. Pídele el contador general después de cada actividad y guárdalo con set_watch_kcal.
 HOY SIEMPRE AL DÍA: cada vez que registres algo que ya hizo (actividad, sesión, comida, pesaje), revisa RECORDATORIOS ABIERTOS en el mismo turno: descarta con dismiss_nudge lo que ya cumplió y, si quedó una parte pendiente (ej. el gym de la tarde), crea con add_nudge uno nuevo solo con lo pendiente. Nunca dejes en Hoy algo que ya hizo. Un solo recordatorio de plan por día: antes de crear uno nuevo, descarta el anterior.
-TIEMPO DE SESIÓN: lunes y viernes trabaja desde casa y está libre desde las 16:00, así que son sus días largos: sesión de hasta 90 min (la más pesada de la semana o fuerza + cardio). Martes a jueves sale libre ~18:00: sesión de 60 min como máximo, más directa. Si no te dice cuánto tiempo tiene, usa eso sin preguntar; si te dice otro tiempo, usa el suyo. AL REACOMODAR LA SEMANA (plan_week): lunes y viernes nunca quedan sin gym (son sus días de mejores resultados; si algo se mueve, que caiga ahí). Nada de piernas (A o C) el día antes ni el día después del fútbol: ese jueves va tren superior y core. Antes de guardar, dile en una línea cómo queda la semana.
+TIEMPO DE SESIÓN: lunes y viernes trabaja desde casa y está libre desde las 16:00, así que son sus días largos: sesión de hasta 90 min (la más pesada de la semana o fuerza + cardio). Martes a jueves sale libre ~18:00: sesión de 60 min como máximo, más directa. Si no te dice cuánto tiempo tiene, usa eso sin preguntar; si te dice otro tiempo, usa el suyo. SI HOY NO QUIERE O NO PUEDE LO PLANEADO (ej. "hoy no piernas"): en ese mismo turno dale la alternativa de hoy y reacomoda el resto de la semana con plan_week, moviendo lo que se saltó al siguiente día que cumpla estas reglas; nunca lo empujes a un día prohibido. AL REACOMODAR LA SEMANA (plan_week): lunes y viernes nunca quedan sin gym (son sus días de mejores resultados; si algo se mueve, que caiga ahí). Nada de piernas (A o C) el día antes ni el día después del fútbol: ese jueves va tren superior y core. Antes de guardar, dile en una línea cómo queda la semana.
 SALUD: no prescribes dietas médicas ni diagnosticas. Para preguntas médicas o de suplementos, dile que lo consulte con su médico.
 LÍMITES DE LA APP: si pide una pantalla, botón o función nueva que la app no tiene, dile que se lo pida a Claude Code; tú no puedes cambiar la app.
 Nunca inventes datos que no estén en el contexto. Si algo no está claro (fecha, porción, unidad), pregunta en una línea.`;
@@ -1743,11 +1748,11 @@ const TOOL_SPECS = [
     } },
   { name: 'set_availability', description: 'Guarda UNA ventana libre u ocupada para una fecha (ej. sábado libre 09:00–12:00). Una llamada por ventana; se suman a las de esa fecha. replace true borra las ventanas que esa fecha tenía antes.', inputSchema: { type: 'object', properties: { date: S_STR, from: { type: 'string', description: 'HH:MM' }, to: { type: 'string', description: 'HH:MM' }, busy: { type: 'boolean' }, note: S_STR, replace: { type: 'boolean' } }, required: ['date'] },
     execute: async (x) => { const date = dateArg(x.date), hm = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim()); return m && +m[1] < 24 && +m[2] < 60 ? m[1].padStart(2, '0') + ':' + m[2] : null; }; if ((x.from && !hm(x.from)) || (x.to && !hm(x.to))) throw new Error('usa HH:MM, ej. 09:00'); await updateCfg('availability', a => { a.overrides = a.overrides || {}; const w = { from: hm(x.from), to: hm(x.to), busy: !!x.busy, note: String(x.note || '').slice(0, 120) }; const prev = x.replace ? [] : (a.overrides[date] || []).filter(q => !(q.from === w.from && q.to === w.to && q.busy === w.busy)); a.overrides[date] = [...prev, w].slice(-6); for (const k of Object.keys(a.overrides)) if (k < addDays(today(), -14)) delete a.overrides[k]; }); toolNote(`Disponibilidad ${date}`); return { ok: true, date }; } },
-  { name: 'plan_week', description: 'Reescribe el plan semanal. days: {mon..sun: {kind: gym|rest|football|flex, template: A|B|C (si gym), title, detail}}. Rechaza piernas (A o C) el día antes de fútbol.', inputSchema: { type: 'object', properties: { days: { type: 'object' }, note: S_STR }, required: ['days'] },
+  { name: 'plan_week', description: 'Reescribe el plan semanal. days: {mon..sun: {kind: gym|rest|football|flex, template: A|B|C (si gym), title, detail}}. Rechaza piernas (A o C) el día antes y el día después del fútbol.', inputSchema: { type: 'object', properties: { days: { type: 'object' }, note: S_STR }, required: ['days'] },
     execute: async (x) => {
       const cur = cfg('plan'), days = { ...cur.days };
       for (const k of DOW_KEYS) if (x.days && x.days[k]) { const v = x.days[k]; days[k] = { kind: ['gym', 'rest', 'football', 'flex'].includes(v.kind) ? v.kind : 'flex', template: ['A', 'B', 'C'].includes(v.template) ? v.template : undefined, title: String(v.title || '').slice(0, 80), detail: String(v.detail || '').slice(0, 200) }; }
-      for (let i = 0; i < 7; i++) { const k = DOW_KEYS[i], nxt = DOW_KEYS[(i + 1) % 7]; if (days[k].kind === 'gym' && TEMPLATES[days[k].template] && TEMPLATES[days[k].template].heavyLegs && days[nxt].kind === 'football') throw new Error(`${k}: el día antes del fútbol no hay piernas (A ni C); pon Gym B o descanso`); }
+      for (let i = 0; i < 7; i++) { const k = DOW_KEYS[i], nxt = DOW_KEYS[(i + 1) % 7]; if (days[k].kind === 'gym' && TEMPLATES[days[k].template] && TEMPLATES[days[k].template].heavyLegs && days[nxt].kind === 'football') throw new Error(`${k}: el día antes del fútbol no hay piernas (A ni C); pon Gym B o descanso`); if (days[k].kind === 'football' && days[nxt].kind === 'gym' && TEMPLATES[days[nxt].template] && TEMPLATES[days[nxt].template].heavyLegs) throw new Error(`${nxt}: el día después del fútbol no hay piernas (A ni C); pon Gym B, cardio suave o descanso`); }
       await updateCfg('plan', p => { p.days = days; if (x.note) p.note = String(x.note); p.weekOf = weekStart(today()); });
       toolNote('Plan semanal actualizado'); return { ok: true };
     } },
