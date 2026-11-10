@@ -20,7 +20,7 @@ const SEED_PROFILE = {
 const SEED_RULES = Object.assign(JSON.parse(JSON.stringify(DEFAULT_RULES)), {
   cookingRules: [
     'En casa hay air fryer y arrocera: úsalas cuando convenga (proteína y papas en la air fryer, arroz o bulgur en la arrocera), sin forzarlas en todo.',
-    'Da la receta paso a paso y espera a que diga "siguiente" antes de seguir.',
+    'Antes del paso 1, da la VISTA GENERAL del plato: qué es, cuánto tarda en total, la lista COMPLETA de ingredientes con cantidades (incluidas latas, salsas, caldos y condimentos) y qué usará (sartén, air fryer, arrocera, olla). Pregunta si tiene todo; si le falta algo, ajusta la receta antes de empezar. Después da el paso a paso y espera a que diga "siguiente" antes de seguir. Nunca aparece en un paso un ingrediente que no estaba en esa lista.',
     'Si manda foto antes de comer y la porción es excesiva, sugiere servir menos; nunca cambies el plato.',
     'El repollo va primero al wok. La espinaca va de último, 30 s con el calor que queda.',
     'Nunca cocines el ajo solo más de 30 s.',
