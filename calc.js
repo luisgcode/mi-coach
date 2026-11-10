@@ -162,6 +162,33 @@ function sessionKcal(sess, bodyKg, rules = DEFAULT_RULES, exById = {}) {
   return { gross: r0(est + cardioGross), estimate: r0(est), watchDelta, strengthSeen: strengthSeen != null ? r0(strengthSeen) : null, extra: r0(strengthExtra + cardioExtra) };
 }
 
+// ---------- Body metrics: green / yellow / red like the scale app (standard ranges, men) ----------
+// ctx: {heightCm, age, weightKg}. Returns {s: 'ok'|'warn'|'over', range} or null when there is no clear standard.
+function metricStatus(k, v, ctx = {}) {
+  v = num(v); if (v == null) return null;
+  const band = (s, range) => ({ s, range });
+  const h = num(ctx.heightCm), age = num(ctx.age), wkg = num(ctx.weightKg);
+  const f1 = x => String(Math.round(x * 10) / 10).replace('.', ',');
+  if (k === 'bmi' || (k === 'weight_kg' && h)) {
+    const bmi = k === 'bmi' ? v : v / Math.pow(h / 100, 2);
+    const range = k === 'bmi' ? 'normal 18,5–24,9' : 'normal ' + f1(18.5 * Math.pow(h / 100, 2)) + '–' + f1(24.9 * Math.pow(h / 100, 2)) + ' kg';
+    return band(bmi < 18.5 ? 'warn' : bmi < 25 ? 'ok' : bmi < 30 ? 'warn' : 'over', range);
+  }
+  if (k === 'body_fat_pct' || (k === 'fat_mass_kg' && wkg)) {
+    const p = k === 'body_fat_pct' ? v : v / wkg * 100;
+    return band(p < 11 ? 'warn' : p < 22 ? 'ok' : p < 27 ? 'warn' : 'over', k === 'body_fat_pct' ? 'normal 11–21 %' : 'normal ' + f1(wkg * 0.11) + '–' + f1(wkg * 0.21) + ' kg');
+  }
+  if (k === 'visceral_fat') return band(v <= 9 ? 'ok' : v < 15 ? 'warn' : 'over', 'normal 1–9');
+  if (k === 'subcutaneous_fat_pct') return band(v < 8.6 ? 'warn' : v <= 16.7 ? 'ok' : v < 24 ? 'warn' : 'over', 'normal 8,6–16,7 %');
+  if (k === 'body_water_pct') return band(v >= 55 ? 'ok' : v >= 50 ? 'warn' : 'over', 'normal 55–65 %');
+  if (k === 'protein_pct') return band(v >= 16 ? 'ok' : v >= 14 ? 'warn' : 'over', 'normal 16–20 %');
+  if (k === 'muscle_mass_kg' && h) { const lo = h < 160 ? 38.5 : h <= 170 ? 44 : 49.4; return band(v >= lo ? 'ok' : 'warn', 'normal desde ' + f1(lo) + ' kg'); }
+  if (k === 'bone_mass_kg' && wkg) { const std = wkg < 60 ? 2.5 : wkg <= 75 ? 2.9 : 3.2; return band(v >= std - 0.1 ? 'ok' : 'warn', 'normal ~' + f1(std) + ' kg'); }
+  if (k === 'body_age' && age) return band(v <= age ? 'ok' : v <= age + 5 ? 'warn' : 'over', 'tu edad: ' + age);
+  if (k === 'heart_rate_bpm') return band(v >= 50 && v <= 100 ? 'ok' : 'warn', 'normal 50–100 lpm');
+  return null;
+}
+
 // ---------- Day balance ----------
 // ctx: {bmr, bodyKg, rules, sessions: sessions of that date}
 // base = BMR x activityFactor (digestion + normal movement up to the movement target).
@@ -890,4 +917,4 @@ function chatTurns(messages, max = 10) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { lighter, weekendRebound, pantryKey, applyPantry, chatMsgId, chatMsgPath, chatTurns, TEMPLATES, canonicalActivity, blockedEquipmentIds, goalPaused, ACTIVITIES, pickFlexActivity, activeBlockedActivities, goalProgress, nextGoalProposal, streaks, movementOptions, pickMovement, FINISHERS, weekIndex, toKg, kgOf, tzNow, addDays, daysBetween, weekStart, dowIndex, strengthKcal, activityKcal, footballStats, sessionKcal, dayBalance, nextStrength, nextRunWalk, describeSets, buildSession, weightSeries, rolling7, learnMealTimes, weekStats, computeNudges, prsFrom, goalsFrom, DEFAULT_RULES, mealSlot };
+if (typeof module !== 'undefined') module.exports = { metricStatus, lighter, weekendRebound, pantryKey, applyPantry, chatMsgId, chatMsgPath, chatTurns, TEMPLATES, canonicalActivity, blockedEquipmentIds, goalPaused, ACTIVITIES, pickFlexActivity, activeBlockedActivities, goalProgress, nextGoalProposal, streaks, movementOptions, pickMovement, FINISHERS, weekIndex, toKg, kgOf, tzNow, addDays, daysBetween, weekStart, dowIndex, strengthKcal, activityKcal, footballStats, sessionKcal, dayBalance, nextStrength, nextRunWalk, describeSets, buildSession, weightSeries, rolling7, learnMealTimes, weekStats, computeNudges, prsFrom, goalsFrom, DEFAULT_RULES, mealSlot };
