@@ -41,12 +41,12 @@ const SEED_PANTRY = { items: [], note: 'Vacía a propósito: Luis la registra de
 const SEED_PLAN = {
   days: {
     mon: { kind: 'gym', template: 'A', title: 'Gym A · Piernas y glúteos (potencia)', detail: 'Hip thrust, sentadilla/prensa, split squat/zancada, RDL, abducción, saltos. Después de las 16:00.' },
-    tue: { kind: 'rest', title: 'Descanso', detail: 'Nada de piernas pesadas: mañana es fútbol.' },
+    tue: { kind: 'gym', template: 'B', title: 'Gym B · Core, rotación y tren superior', detail: 'Desde las 18:00, ~60 min. Sin piernas pesadas: mañana es fútbol.' },
     wed: { kind: 'football', title: 'Fútbol 21:00–22:00', detail: 'Peso + reloj antes y después.' },
-    thu: { kind: 'gym', template: 'B', title: 'Gym B · Core, rotación y tren superior', detail: 'Desde las 18:00. Calienta en la elíptica (sin impacto) si las piernas quedaron cargadas del fútbol.' },
+    thu: { kind: 'gym', template: 'B', title: 'Gym B · Tren superior, core y cardio sin impacto', detail: 'Desde las 18:00, ~60 min. Sin piernas pesadas: ayer fue fútbol. Calienta en la elíptica.' },
     fri: { kind: 'gym', template: 'C', title: 'Gym C · Glúteos + intervalos', detail: 'Después de las 16:00. Preguntar disponibilidad del finde.' },
-    sat: { kind: 'flex', title: 'Día flexible: una actividad bajo techo', detail: 'Si hay tiempo libre en la mañana.' },
-    sun: { kind: 'flex', title: 'Día flexible: una actividad bajo techo', detail: 'Si hay tiempo libre en la mañana.' }
+    sat: { kind: 'flex', title: 'Fin de semana: tú avisas', detail: 'El viernes Luis dice qué puede hacer el finde.' },
+    sun: { kind: 'flex', title: 'Fin de semana: tú avisas', detail: 'El viernes Luis dice qué puede hacer el finde.' }
   },
   note: 'Nunca piernas pesadas el día antes del fútbol.'
 };
