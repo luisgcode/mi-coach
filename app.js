@@ -31,6 +31,9 @@ function figSVG(pattern, size = 'md') {
   const ar = f.arrow ? `<g class="fig-arrow"><line x1="${f.arrow[0]}" y1="${f.arrow[1]}" x2="${f.arrow[2]}" y2="${f.arrow[3]}"/><circle cx="${f.arrow[2]}" cy="${f.arrow[3]}" r="2.6"/></g>` : '';
   return `<svg class="fig fig-${size}" viewBox="0 0 120 80" role="img" aria-label="${esc(f.cap)}"><g class="fig-props">${props}</g><g class="fig-body">${body}<circle cx="${f.head[0]}" cy="${f.head[1]}" r="6"/></g>${ar}</svg>`;
 }
+function exPhotos(ex) { return (ex && Array.isArray(ex.photos) && ex.photos.length) ? ex.photos.slice(0, 2) : null; }
+function exThumb(ex, pattern) { const p = exPhotos(ex); return p ? `<img class="exthumb" src="${esc(p[p.length - 1])}" alt="" loading="lazy">` : figSVG(pattern, 'sm'); }
+function exGuidePics(ex, pattern) { const p = exPhotos(ex); if (!p) return `${figSVG(pattern, 'md')}<p class="tiny muted" style="text-align:center;margin:0">${esc(figCaption(pattern))}</p>`; const lab = ['1. Empieza así', '2. Termina así']; return `<div class="expics">${p.map((u, k) => `<figure><img src="${esc(u)}" alt="${esc(ex.name)}: ${lab[k] || ''}" loading="lazy"><figcaption class="tiny muted">${p.length > 1 ? lab[k] : ''}</figcaption></figure>`).join('')}</div>`; }
 function figCaption(pattern) { return (FIGS[PATTERN_FIG[pattern] || 'squat'] || {}).cap || ''; }
 
 
@@ -991,7 +994,7 @@ function howToBlock(ex, it, s, forceOpen) {
   const open = forceOpen || timesDone(ex.id, sessionsArr()) <= 3;
   const ho = ex.howto;
   const focus = (s && s.focus) || [];
-  let h = `<details class="how" ${open ? 'open' : ''}><summary>Cómo se hace</summary>${figSVG(ex.pattern || it.pattern, 'md')}<p class="tiny muted" style="text-align:center;margin:0">${esc(figCaption(ex.pattern || it.pattern))}</p>`;
+  let h = `<details class="how" ${open ? 'open' : ''}><summary>Cómo se hace</summary>${exGuidePics(ex, ex.pattern || it.pattern)}`;
   const eq = eqArr().find(q => (ex.equipmentIds || []).includes(q.id) && q.photoId);
   if (eq) h += `<img class="photo" src="${esc(files.urlFor(eq.photoId))}" alt="Foto de tu ${esc(eq.name)}" loading="lazy">`;
   if (ho) {
@@ -1011,7 +1014,7 @@ function viewItem(s, it, i) {
   const ex = cache.get('exercises/' + it.exId) ? { id: it.exId, ...cache.get('exercises/' + it.exId) } : { id: it.exId, name: it.name, pattern: it.pattern };
   const unit = itemDisplayUnit(it), list = (it.planned && it.planned.list) || [];
   const planTxt = list.length && (list[0].w || list[0].kg) ? describeSets(list) : `${it.planned.sets}×${it.planned.reps}`;
-  let h = `<section class="card" aria-labelledby="h-it${i}"><div class="exhead">${figSVG(it.pattern, 'sm')}<div class="grow"><h3 id="h-it${i}">${esc(it.name)}${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.isNew ? ' <span class="pill warn">nuevo</span>' : ''}</h3>${it.group ? `<div class="tiny ink2">${esc(it.group)}</div>` : ''}<div class="small"><b>Plan:</b> ${esc(planTxt)}</div><div class="tiny muted">${esc(it.why || '')}</div></div></div>`;
+  let h = `<section class="card" aria-labelledby="h-it${i}"><div class="exhead">${exThumb(cache.get('exercises/' + it.exId), it.pattern)}<div class="grow"><h3 id="h-it${i}">${esc(it.name)}${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.isNew ? ' <span class="pill warn">nuevo</span>' : ''}</h3>${it.group ? `<div class="tiny ink2">${esc(it.group)}</div>` : ''}<div class="small"><b>Plan:</b> ${esc(planTxt)}</div><div class="tiny muted">${esc(it.why || '')}</div></div></div>`;
   h += howToBlock(ex, it, s);
   h += `<div class="row sp" style="margin-top:10px"><span class="small ink2">Series</span><span class="row"><span class="tiny muted">Unidad</span><button class="chip" style="min-height:36px" data-act="setUnit" data-arg="${i}.kg" aria-pressed="${unit === 'kg'}">kg</button><button class="chip" style="min-height:36px" data-act="setUnit" data-arg="${i}.lb" aria-pressed="${unit === 'lb'}">lb</button></span></div>`;
   (it.sets || []).forEach((st, j) => {
@@ -1474,6 +1477,7 @@ GYM POR CHAT: la pestaña Gym es solo lectura; la sesión la llevas tú.
 - "Acabo de llegar, tengo 60 min, el reloj marca X" → start_session (time_min, energy, watch_kcal). La rutina sale como tarjeta: responde con UNA línea, no repitas la lista.
 - Series ("hice 3x12 con 25 lb, la última costó") → log_sets (unidad tal cual). Ajusta lo que queda si hace falta.
 - Dolor o "no me gusta" → swap_exercise con block true y di el sustituto en una línea.
+- "No hay dónde hacerlo", "no hay máquina", "no tengo eso" → swap_exercise con block true y reason "no hay dónde hacerlo": queda bloqueado para siempre. Nunca vuelvas a proponer ese ejercicio ni una variante del mismo movimiento con otro agarre o en otra máquina (ej. si el remo sentado está bloqueado, tampoco "remo sentado con agarre V"). Revisa la lista de BLOQUEADOS antes de elegir.
 - "Terminé, el reloj marca Y" → end_session y responde corto: kcal (estimado − reloj = extra), récords y la próxima vez.
 - Foto de una máquina que ya existe ("esta es la prensa") → link_equipment_photo. Máquina nueva → add_equipment con use_attached_photo.
 VIERNES: pregunta por la disponibilidad del finde y guárdala con set_availability.

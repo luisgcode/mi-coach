@@ -193,3 +193,8 @@ body.kb .app{padding-bottom:12px}
 .iconbtn.rec{background:var(--bad);border-color:var(--bad);color:#fff;animation:recpulse 1.2s ease-in-out infinite}
 @keyframes recpulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--bad) 30%,transparent)}}
 @media (prefers-reduced-motion:reduce){.iconbtn.rec{animation:none}}
+.exthumb{flex:none;width:72px;height:48px;object-fit:cover;border-radius:10px;background:var(--surface2)}
+.expics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.expics figure{margin:0}
+.expics img{width:100%;height:auto;border-radius:10px;display:block}
+.expics figcaption{text-align:center;margin-top:2px}
