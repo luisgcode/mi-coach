@@ -14,5 +14,6 @@ for (const [t, d] of [['A', '2026-11-09'], ['C', '2026-11-13'], ['B', '2026-11-1
   for (const i of long.items) assert.strictEqual(i.sets.length, i.planned.list.length, 'set rows match plan');
 }
 const tired = mk('A', 90, '2026-11-09', 'cansado');
-assert.ok(tired.items.every(i => i.planned.sets <= 3), 'tired: no extra sets');
+assert.ok(tired.items.every(i => i.planned.sets === 4), 'always 4 sets');
+assert.ok(mk('B', 60, '2026-11-12').items.every(i => i.planned.sets === 4 && (i.pattern === 'core' || i.planned.reps === 12 || i.planned.list[0].reps === 12)), 'default 4x12');
 console.log('long-day ok');

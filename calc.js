@@ -309,7 +309,9 @@ const TEMPLATES = {
 };
 const HOME_SLOTS = [{ p: ['hip_thrust'] }, { p: ['squat'] }, { p: ['press'] }, { p: ['core'] }];
 const PUSH = ['press'], PULL = ['row', 'pulldown'];
-const DEFAULT_REPS = { jump: 5, hip_thrust: 10, squat: 8, leg_press: 10, hinge: 10, swing: 15, throw: 8, core: 12, rotation: 10, carry: 1 };
+// Luis's default: 4 sets x 12 reps on everything (core: 4 x 20).
+const DEFAULT_SETS = 4, DEFAULT_REP = 12;
+const DEFAULT_REPS = { jump: 5, hip_thrust: 12, squat: 12, leg_press: 12, hinge: 12, swing: 15, throw: 12, core: 20, rotation: 12, carry: 1 };
 const FORMATS = { series: 'series normales', superserie: 'superseries', circuito: 'circuito' };
 
 // Finishers (5–8 min) and football-style games. needs = equipment ids (all required).
@@ -370,7 +372,7 @@ function buildSession(args) {
   let format = home ? 'circuito' : fmtKeys[(wk + (tKey === 'B' ? 1 : tKey === 'C' ? 2 : 0)) % 3];
   if (energy === 'cansado' && !home) format = 'series';
   if (timeMin <= 30 && !home) format = 'circuito';
-  const setsPer = format === 'circuito' ? 3 : energy === 'bien' ? 4 : 3;
+  const setsPer = DEFAULT_SETS;
   // Conditioning: run/walk progression on C; finisher (5–8 min) when there is time.
   let cardio = null, cardioMin = 0, finisher = null;
   const hasElliptical = eqIds.has('elliptical');
@@ -393,7 +395,7 @@ function buildSession(args) {
   }
   const finMin = finisher ? finisher.minutes + 1 : 0;
   const perEx = format === 'circuito' ? setsPer * 1.6 + 1 : format === 'superserie' ? setsPer * 1.8 + 1 : setsPer * 2.25 + 1.5;
-  const slotsN = Math.max(1, Math.min(6, Math.floor((timeMin - 5 - cardioMin - finMin) / perEx)));
+  const slotsN = Math.max(1, Math.min(timeMin >= 75 ? 9 : 6, Math.floor((timeMin - 5 - cardioMin - finMin) / perEx)));
   const logs = e => timesDone(e.id, args.sessions || []);
   const chosen = [], anchorIds = new Set();
   const slots = home ? HOME_SLOTS : T.slots;
@@ -442,7 +444,7 @@ function buildSession(args) {
     const prog = nextStrength(tired && last && last.feel !== 'dolor' ? { ...last, feel: 'dificil' } : last, { step });
     let planSets;
     if (prog && prog.action !== 'block') planSets = prog.sets.slice(0, setsPer).concat(prog.sets.length < setsPer ? Array.from({ length: setsPer - prog.sets.length }, () => prog.sets[prog.sets.length - 1]) : []);
-    else planSets = Array.from({ length: setsPer }, () => ({ reps: DEFAULT_REPS[e.pattern] || 10, kg: null, w: null, unit: 'kg' }));
+    else planSets = Array.from({ length: setsPer }, () => ({ reps: DEFAULT_REPS[e.pattern] || DEFAULT_REP, kg: null, w: null, unit: 'kg' }));
     if (tired && prog && prog.action !== 'down') planSets = planSets.map(s => { if (!s.w) return s; const st = s.unit === 'lb' ? 5 : step; const w = lighter(s.w, st); return { ...s, w, kg: toKg(w, s.unit) }; });
     const unit = (prog && prog.unit) || (last && (last.sets || []).slice(-1)[0]?.unit) || 'kg';
     const isNew = !last && timesDone(e.id, args.sessions || []) === 0;
@@ -462,7 +464,7 @@ function buildSession(args) {
   // Long days (Mon/Fri, up to 90 min): use the spare time for results, not idle minutes.
   // 1) one more set on the first two exercises (main lifts, more stimulus); 2) a low-impact interval block on the elliptical.
   let est = 5 + items.length * perEx + cardioMin + finMin;
-  if (!home && energy !== 'cansado' && format !== 'circuito' && timeMin - est >= 6) {
+  if (false) { // fixed 4 sets: long days get more exercises instead of extra sets
     for (const it of items.slice(0, 2)) {
       if (timeMin - est < 3) break;
       const lastSet = it.planned.list[it.planned.list.length - 1];
