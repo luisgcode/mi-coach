@@ -45,20 +45,40 @@ header.top{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-bet
 .ticker.flash b{color:inherit}
 .track{position:relative}
 .lane{position:absolute;left:0;right:0;height:var(--laneH);transition:top .9s cubic-bezier(.3,.9,.3,1)}
-.lane-bg{position:absolute;inset:4px 0;border-radius:8px;background:repeating-linear-gradient(90deg,transparent 0 28px,rgba(255,255,255,.05) 28px 56px)}
+.lane-bg{position:absolute;inset:6px 0;border-radius:10px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.07) 0 22px,transparent 22px 44px);background-size:44px 100%;animation:road .6s linear infinite}
+@keyframes road{to{background-position:-44px 0}}
 .lane::after{content:"";position:absolute;left:0;right:0;bottom:0;border-bottom:2px dashed rgba(246,211,74,.35)}
 .lane:last-child::after{display:none}
-.finish{position:absolute;top:0;bottom:0;right:0;width:16px;background:conic-gradient(#fff 25%,#111 0 50%,#fff 0 75%,#111 0) 0 0/8px 8px;opacity:.9;border-radius:0 6px 6px 0}
-.pos{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-family:var(--f-display);font-size:18px;color:#cfc9e6;width:30px}
-.road{position:absolute;left:44px;right:22px;top:0;bottom:0}
-.kart{position:absolute;top:50%;width:112px;transform:translateY(-50%);transition:left 1.2s cubic-bezier(.25,.9,.3,1.1);display:flex;align-items:center;gap:6px}
-.kart svg{width:76px;height:auto;flex:none;filter:drop-shadow(0 3px 0 rgba(0,0,0,.35))}
-.kart .tag{font-weight:700;font-size:13px;line-height:1.15;white-space:nowrap}
-.kart .tag .num{display:block;font-family:var(--f-display);font-size:16px;color:var(--lane-mark)}
-.kart.boost svg{animation:boost .9s ease 2}
-@keyframes boost{0%,100%{transform:translateX(0) rotate(0)}25%{transform:translateX(5px) rotate(-3deg)}60%{transform:translateX(-2px) rotate(1deg)}}
-.kart.boost::before{content:"";position:absolute;left:-26px;top:50%;width:24px;height:10px;transform:translateY(-50%);background:radial-gradient(circle,rgba(255,255,255,.7) 30%,transparent 31%) 0 0/8px 10px;animation:puff .9s linear 2}
-@keyframes puff{from{opacity:1;transform:translate(0,-50%)}to{opacity:0;transform:translate(-14px,-50%)}}
+.finish{position:absolute;top:6px;bottom:6px;right:0;width:14px;background:conic-gradient(#fff 25%,#111 0 50%,#fff 0 75%,#111 0) 0 0/7px 7px;border-radius:0 6px 6px 0}
+.pos{position:absolute;left:4px;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-display);font-size:13px;background:rgba(255,255,255,.1);color:#fff}
+.lane[data-rank="1"] .pos{background:#f6c445;color:#2b2010}
+.lane[data-rank="2"] .pos{background:#c9cdd6;color:#22252b}
+.lane[data-rank="3"] .pos{background:#d08a4e;color:#2a1608}
+.road{position:absolute;left:42px;right:20px;top:0;bottom:0}
+.kart{position:absolute;bottom:8px;width:var(--kartW);transition:left 1.6s cubic-bezier(.22,.9,.28,1.08)}
+.kart .body{position:relative;animation:bob .35s ease-in-out infinite alternate}
+@keyframes bob{to{transform:translateY(-2px)}}
+.kart svg{display:block;width:100%;height:auto;filter:drop-shadow(0 3px 0 rgba(0,0,0,.4))}
+.kart .wheel{transform-box:fill-box;transform-origin:center;animation:spin .4s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.kart .name{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:2px;white-space:nowrap;font-weight:700;font-size:12px;background:rgba(0,0,0,.55);padding:1px 7px;border-radius:999px}
+.kart .wins{position:absolute;right:-6px;top:-4px;min-width:24px;height:24px;padding:0 6px;border-radius:12px;background:var(--lane-mark);color:#1d1a2e;font-family:var(--f-display);font-size:13px;display:grid;place-items:center;box-shadow:0 2px 0 rgba(0,0,0,.35)}
+.kart .crown{position:absolute;left:50%;bottom:100%;transform:translate(-50%,-16px);width:22px;display:none;animation:crown 1.2s ease-in-out infinite alternate}
+.lane[data-rank="1"][data-lead="1"] .kart .crown{display:block}
+@keyframes crown{to{transform:translate(-50%,-19px) rotate(6deg)}}
+.kart .smoke{position:absolute;left:-10px;bottom:6px;width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.35);animation:smoke .7s linear infinite}
+.kart .smoke.s2{animation-delay:.35s}
+@keyframes smoke{from{transform:translate(0,0) scale(.6);opacity:.8}to{transform:translate(-22px,-8px) scale(1.6);opacity:0}}
+.kart .fire{position:absolute;left:-26px;bottom:6px;width:28px;height:14px;display:none;background:radial-gradient(ellipse at right,#fff6 0,#ffd23a 30%,#ff6a1a 60%,transparent 70%);border-radius:50%;animation:fire .12s linear infinite alternate}
+@keyframes fire{to{transform:scaleX(1.3)}}
+.kart.boost .fire{display:block}
+.kart.boost .body{animation:wheelie .5s ease 3}
+@keyframes wheelie{0%,100%{transform:rotate(0)}40%{transform:rotate(-8deg) translateX(4px)}}
+.lights{position:absolute;inset:0;display:grid;place-items:center;z-index:5;pointer-events:none}
+.lights span{font-family:var(--f-display);font-size:clamp(40px,12vw,84px);color:#fff;text-shadow:0 4px 0 #000;animation:pop .5s ease both}
+.lights span.go{color:var(--lane-mark)}
+@keyframes pop{from{transform:scale(2.2);opacity:0}to{transform:scale(1);opacity:1}}
+#confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
 .race-empty{padding:30px 10px;text-align:center;color:#cfc9e6}
 
 /* Panels */
@@ -104,8 +124,8 @@ td.best{font-weight:700;color:var(--good)}
 .setup{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .setup input{font:15px var(--f-body);padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-width:0;flex:1 1 180px}
 details summary{cursor:pointer;font-weight:700}
-@media (prefers-reduced-motion: reduce){.lane,.kart,.bar i{transition:none}.kart.boost svg,.kart.boost::before,.ticker.flash{animation:none}}
-@media (max-width:560px){.kart{width:92px}.kart svg{width:58px}.kart .tag{font-size:12px}.pos{font-size:15px;width:24px}.road{left:34px}}
+@media (prefers-reduced-motion: reduce){.lane,.kart,.bar i{transition:none}.lane-bg,.kart .body,.kart .wheel,.kart .smoke,.kart .crown,.ticker.flash,.lights span{animation:none}}
+@media (max-width:560px){.road{left:38px;right:16px}.pos{width:26px;height:26px;font-size:12px}.kart .name{font-size:11px}}
 body{margin:0}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}
 </style>
 </head>
@@ -123,10 +143,11 @@ body{margin:0}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(
   <section class="race" aria-labelledby="race-title">
     <div class="race-head">
       <h2 id="race-title">La carrera</h2>
-      <span class="eyebrow">El que más gana va adelante</span>
+      <span class="eyebrow">Cada victoria avanza una casilla · <span id="meta">Meta: 30 victorias</span></span>
     </div>
     <div class="ticker" id="ticker" aria-live="polite">Todavía no hay victorias. La primera que se anote aparece aquí.</div>
     <div class="track" id="track"></div>
+    <canvas id="confetti" aria-hidden="true"></canvas>
   </section>
 
   <section class="panel" aria-labelledby="gen-title">
@@ -155,18 +176,20 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 function kartSVG(color,initial){
-  return `<svg viewBox="0 0 120 70" aria-hidden="true">
-  <path d="M8 46 L20 30 L52 28 L62 18 L82 18 L90 30 L110 34 L114 46 Z" fill="${color}"/>
-  <path d="M20 30 L52 28 L58 40 L14 42 Z" fill="rgba(0,0,0,.18)"/>
-  <rect x="96" y="22" width="18" height="6" rx="2" fill="#222"/>
-  <rect x="2" y="24" width="14" height="5" rx="2" fill="#222"/>
-  <circle cx="70" cy="12" r="11" fill="#fff"/><circle cx="70" cy="12" r="11" fill="${color}" opacity=".35"/>
-  <path d="M71 6 h9 a5 5 0 0 1 0 10 h-9 z" fill="#1d1a2e"/>
-  <text x="66" y="16" font-family="Bungee,Arial Black,sans-serif" font-size="11" fill="#1d1a2e" text-anchor="middle">${esc(initial)}</text>
-  <circle cx="26" cy="52" r="13" fill="#1a1a1a"/><circle cx="26" cy="52" r="5" fill="#bbb"/>
-  <circle cx="96" cy="52" r="13" fill="#1a1a1a"/><circle cx="96" cy="52" r="5" fill="#bbb"/>
+  return `<svg viewBox="0 0 120 64" aria-hidden="true">
+  <path d="M6 44 L16 30 L48 27 L58 16 L80 16 L90 28 L112 32 L116 44 Q60 50 6 44 Z" fill="${color}"/>
+  <path d="M16 30 L48 27 L54 38 L12 40 Z" fill="rgba(0,0,0,.2)"/>
+  <path d="M90 28 L112 32 L114 38 L92 36 Z" fill="rgba(255,255,255,.35)"/>
+  <rect x="98" y="20" width="18" height="6" rx="2" fill="#222"/><rect x="104" y="24" width="3" height="8" fill="#222"/>
+  <rect x="0" y="22" width="14" height="5" rx="2" fill="#222"/>
+  <circle cx="68" cy="11" r="11" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+  <path d="M69 5 h9 a5 5 0 0 1 0 10 h-9 z" fill="#1d1a2e"/>
+  <text x="64" y="15" font-family="Bungee,Arial Black,sans-serif" font-size="11" fill="#fff" text-anchor="middle">${esc(initial)}</text>
+  <g class="wheel"><circle cx="26" cy="49" r="13" fill="#1a1a1a"/><circle cx="26" cy="49" r="6" fill="#ccc"/><rect x="24.5" y="38" width="3" height="22" fill="#555"/><rect x="15" y="47.5" width="22" height="3" fill="#555"/></g>
+  <g class="wheel"><circle cx="96" cy="49" r="13" fill="#1a1a1a"/><circle cx="96" cy="49" r="6" fill="#ccc"/><rect x="94.5" y="38" width="3" height="22" fill="#555"/><rect x="85" y="47.5" width="22" height="3" fill="#555"/></g>
   </svg>`;
 }
+const CROWN='<svg class="crown" viewBox="0 0 24 16" aria-hidden="true"><path d="M2 14 L4 4 L9 9 L12 2 L15 9 L20 4 L22 14 Z" fill="#f6c445" stroke="#7a5a10" stroke-width="1.2"/></svg>';
 const pById=id=>S.players.find(p=>p.id===id);
 const gById=id=>S.games.find(g=>g.id===id);
 function counts(){
@@ -180,33 +203,52 @@ function ranking(){
   return S.players.slice().sort((a,b)=>(tot[b.id]-tot[a.id])||a.name.localeCompare(b.name));
 }
 
+let raceStarted=false;
 function renderRace(){
   const track=$("track"); const {tot}=counts(); const order=ranking();
-  if(!S.players.length){track.style.height="auto";track.innerHTML=`<div class="race-empty">Agrega a los jugadores en la sección Jugadores, abajo, y aquí aparecen sus carritos.</div>`;return;}
-  const max=Math.max(1,...order.map(p=>tot[p.id]));
-  track.style.height=(order.length*LANE_H)+"px"; track.style.setProperty("--laneH",LANE_H+"px");
-  // keep existing lane nodes so moves animate
-  const keep=new Set();
+  if(!S.players.length){track.style.height="auto";track.innerHTML=`<div class="race-empty">Todavía no hay jugadores.</div>`;return;}
+  track.querySelectorAll(".race-empty").forEach(e=>e.remove());
+  const narrow=track.clientWidth<560, laneH=narrow?74:82, kartW=narrow?62:86;
+  track.style.setProperty("--laneH",laneH+"px"); track.style.setProperty("--kartW",kartW+"px");
+  const lead=Math.max(0,...order.map(p=>tot[p.id]));
+  const max=Math.max(30,Math.ceil((lead+8)/10)*10);
+  const meta=document.getElementById("meta"); if(meta)meta.textContent="Meta: "+max+" victorias";
+  track.style.height=(order.length*laneH)+"px";
+  const keep=new Set(); const topWins=tot[order[0].id], soloLead=order.length<2||tot[order[1].id]<topWins;
   order.forEach((p,i)=>{
     keep.add(p.id);
-    let lane=track.querySelector(`[data-p="${p.id}"]`);
+    let lane=track.querySelector(`.lane[data-p="${p.id}"]`);
     if(!lane){lane=document.createElement("div");lane.className="lane";lane.dataset.p=p.id;
-      lane.innerHTML=`<div class="lane-bg"></div><div class="finish"></div><div class="pos"></div><div class="road"><div class="kart"></div></div>`;
-      lane.style.top=(i*LANE_H)+"px";track.appendChild(lane);
-      lane.querySelector(".kart").style.left="0px";}
-    lane.style.top=(i*LANE_H)+"px";
+      lane.innerHTML=`<div class="lane-bg"></div><div class="finish"></div><div class="pos"></div><div class="road"><div class="kart" style="left:0px"><div class="body"><span class="smoke"></span><span class="smoke s2"></span><span class="fire"></span><div class="art"></div>${CROWN}<span class="name"></span><span class="wins"></span></div></div></div>`;
+      lane.style.top=(i*laneH)+"px";track.appendChild(lane);}
+    lane.style.top=(i*laneH)+"px"; lane.dataset.rank=i+1; lane.dataset.lead=(i===0&&topWins>0&&soloLead)?"1":"0";
     lane.querySelector(".pos").textContent=(i+1)+"°";
-    const kart=lane.querySelector(".kart");
-    const w=tot[p.id];
-    kart.innerHTML=`${kartSVG(p.color,(p.name||"?")[0].toUpperCase())}<span class="tag">${esc(p.name)}<span class="num">${w}</span></span>`;
+    const kart=lane.querySelector(".kart"), w=tot[p.id];
+    const art=lane.querySelector(".art"); if(art.dataset.c!==p.color){art.innerHTML=kartSVG(p.color,(p.name||"?")[0].toUpperCase());art.dataset.c=p.color;}
+    lane.querySelector(".name").textContent=p.name; lane.querySelector(".wins").textContent=w;
     kart.setAttribute("aria-label",`${p.name}: ${w} victorias, puesto ${i+1}`);
-    const pct=w/max;
-    requestAnimationFrame(()=>{kart.style.left=`calc(${pct} * (100% - ${kart.offsetWidth||112}px))`;});
+    kart.dataset.target=`calc(${w/max} * (100% - ${kartW}px))`;
+    if(raceStarted)kart.style.left=kart.dataset.target;
   });
   track.querySelectorAll(".lane").forEach(l=>{if(!keep.has(l.dataset.p))l.remove();});
 }
-
-
+function startRace(){
+  if(raceStarted)return; const race=document.querySelector(".race");
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const go=()=>{raceStarted=true;document.querySelectorAll(".kart").forEach(k=>{if(k.dataset.target)k.style.left=k.dataset.target;});};
+  if(reduce){go();return;}
+  const box=document.createElement("div");box.className="lights";race.appendChild(box);
+  const steps=["3","2","1","¡YA!"];let i=0;
+  const tick=()=>{if(i<steps.length){box.innerHTML=`<span class="${i===3?"go":""}">${steps[i]}</span>`;if(i===3)go();i++;setTimeout(tick,i===4?700:600);}else box.remove();};
+  tick();
+}
+function confetti(x,y){
+  const c=$("confetti"),race=document.querySelector(".race");if(matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  const r=race.getBoundingClientRect();c.width=r.width;c.height=r.height;const ctx=c.getContext("2d");
+  const cols=["#f6d34a","#e8412f","#2f7de8","#22a55b","#ffffff","#8e4ae0"];
+  const ps=Array.from({length:90},()=>({x,y,vx:(Math.random()-.5)*9,vy:-Math.random()*9-3,s:4+Math.random()*5,c:cols[Math.floor(Math.random()*cols.length)],r:Math.random()*6,vr:(Math.random()-.5)*.4}));
+  let t=0;const step=()=>{ctx.clearRect(0,0,c.width,c.height);ps.forEach(p=>{p.vy+=.28;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.fillStyle=p.c;ctx.fillRect(-p.s/2,-p.s/4,p.s,p.s/2);ctx.restore();});if(++t<110)requestAnimationFrame(step);else ctx.clearRect(0,0,c.width,c.height);};step();
+}
 function renderGeneral(){
   const {tot,per}=counts(); const order=ranking();
   if(!order.length){$("general").innerHTML=`<tr><td class="muted">Sin jugadores todavía.</td></tr>`;return;}
@@ -249,7 +291,7 @@ function announce(w){
   t.innerHTML=`🏁 <span><b>${esc(p.name)}</b> sumó una victoria en <b>${esc(g?.name||w.game)}</b>: ya lleva ${per[p.id]?.[w.game]||0} en ese juego y ${tot[p.id]} en total.</span>`;
   t.classList.remove("flash");void t.offsetWidth;t.classList.add("flash");
   const k=document.querySelector(`.lane[data-p="${w.player}"] .kart`);
-  if(k){k.classList.remove("boost");void k.offsetWidth;k.classList.add("boost");}
+  if(k){k.classList.remove("boost");void k.offsetWidth;k.classList.add("boost");setTimeout(()=>k.classList.remove("boost"),2200);setTimeout(()=>{const rr=document.querySelector(".race").getBoundingClientRect(),kr=k.getBoundingClientRect();confetti(kr.left-rr.left+kr.width/2,kr.top-rr.top);},900);}
 }
 function lastLine(){
   const w=S.wins.slice().sort((a,b)=>(b.at||"").localeCompare(a.at||""))[0];
@@ -267,11 +309,12 @@ async function load(){
     S.wins=(d.wins||[]).map((w,i)=>({id:String(i),...w}));
     renderAll();
     if(lastCount!==null&&S.wins.length>lastCount){const nw=S.wins.slice(lastCount).sort((a,b)=>(b.at||'').localeCompare(a.at||''));setTimeout(()=>announce(nw[0]),300);}
-    else if(lastCount===null)lastLine();
+    else if(lastCount===null){lastLine();setTimeout(startRace,250);}
     lastCount=S.wins.length;
     $('status').textContent='En vivo · '+S.wins.length+' victorias · se actualiza solo';
   }catch(e){$('status').textContent='Sin conexión, reintentando…';}
 }
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(renderRace,150);});
 load(); setInterval(()=>{if(!document.hidden)load();},20000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});
 </script>
