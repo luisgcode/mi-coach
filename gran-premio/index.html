@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2b2838">
+<title>Gran Premio de Mesa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700&display=swap">
+<style>
+/* Layout: race track hero (lanes sorted by wins) → log a win → general table → one card per game → recent history */
+:root{
+  --bg:#f3f1fb; --surface:#ffffff; --ink:#1d1a2e; --muted:#6a6585; --line:#dcd8ec;
+  --accent:#e8412f; --accent-ink:#ffffff; --asphalt:#2b2838; --asphalt-2:#353145; --lane-mark:#f6d34a;
+  --good:#1f9d63;
+  --f-display:"Bungee","Arial Black",system-ui,sans-serif;
+  --f-body:"Rubik",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14121d; --surface:#1e1b2b; --ink:#f1eefb; --muted:#a39dbd; --line:#332f45;
+  --accent:#ff5a46; --accent-ink:#ffffff; --asphalt:#0d0b14; --asphalt-2:#17141f; --lane-mark:#e5c23c; --good:#3cc286; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14121d; --surface:#1e1b2b; --ink:#f1eefb; --muted:#a39dbd; --line:#332f45;
+  --accent:#ff5a46; --accent-ink:#ffffff; --asphalt:#0d0b14; --asphalt-2:#17141f; --lane-mark:#e5c23c; --good:#3cc286; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px;display:grid;gap:28px}
+h1,h2{font-family:var(--f-display);font-weight:400;letter-spacing:.01em;text-wrap:balance;margin:0}
+h1{font-size:clamp(26px,5vw,40px);line-height:1.05}
+h2{font-size:20px}
+.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.muted{color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+header.top{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+.status{font-size:13px;color:var(--muted)}
+
+/* Race */
+.race{background:var(--asphalt);border-radius:18px;padding:14px 14px 16px;color:#fff;position:relative;overflow:hidden}
+.race-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:0 4px 10px;flex-wrap:wrap}
+.race-head .eyebrow{color:#cfc9e6}
+.ticker{min-height:44px;display:flex;align-items:center;gap:10px;background:var(--asphalt-2);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-weight:500}
+.ticker b{color:var(--lane-mark);font-weight:700}
+.ticker.flash{animation:flash 1.6s ease}
+@keyframes flash{0%{background:var(--lane-mark);color:#1d1a2e}30%{background:var(--lane-mark);color:#1d1a2e}100%{background:var(--asphalt-2);color:#fff}}
+.ticker.flash b{color:inherit}
+.track{position:relative}
+.lane{position:absolute;left:0;right:0;height:var(--laneH);transition:top .9s cubic-bezier(.3,.9,.3,1)}
+.lane-bg{position:absolute;inset:4px 0;border-radius:8px;background:repeating-linear-gradient(90deg,transparent 0 28px,rgba(255,255,255,.05) 28px 56px)}
+.lane::after{content:"";position:absolute;left:0;right:0;bottom:0;border-bottom:2px dashed rgba(246,211,74,.35)}
+.lane:last-child::after{display:none}
+.finish{position:absolute;top:0;bottom:0;right:0;width:16px;background:conic-gradient(#fff 25%,#111 0 50%,#fff 0 75%,#111 0) 0 0/8px 8px;opacity:.9;border-radius:0 6px 6px 0}
+.pos{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-family:var(--f-display);font-size:18px;color:#cfc9e6;width:30px}
+.road{position:absolute;left:44px;right:22px;top:0;bottom:0}
+.kart{position:absolute;top:50%;width:112px;transform:translateY(-50%);transition:left 1.2s cubic-bezier(.25,.9,.3,1.1);display:flex;align-items:center;gap:6px}
+.kart svg{width:76px;height:auto;flex:none;filter:drop-shadow(0 3px 0 rgba(0,0,0,.35))}
+.kart .tag{font-weight:700;font-size:13px;line-height:1.15;white-space:nowrap}
+.kart .tag .num{display:block;font-family:var(--f-display);font-size:16px;color:var(--lane-mark)}
+.kart.boost svg{animation:boost .9s ease 2}
+@keyframes boost{0%,100%{transform:translateX(0) rotate(0)}25%{transform:translateX(5px) rotate(-3deg)}60%{transform:translateX(-2px) rotate(1deg)}}
+.kart.boost::before{content:"";position:absolute;left:-26px;top:50%;width:24px;height:10px;transform:translateY(-50%);background:radial-gradient(circle,rgba(255,255,255,.7) 30%,transparent 31%) 0 0/8px 10px;animation:puff .9s linear 2}
+@keyframes puff{from{opacity:1;transform:translate(0,-50%)}to{opacity:0;transform:translate(-14px,-50%)}}
+.race-empty{padding:30px 10px;text-align:center;color:#cfc9e6}
+
+/* Panels */
+.panel{display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{appearance:none;border:2px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font:500 14px var(--f-body);cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.chip .dot{width:12px;height:12px;border-radius:50%;flex:none}
+.chip[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--surface)}
+.chip:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn{appearance:none;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:700 16px var(--f-body);padding:12px 20px;cursor:pointer}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500;font-size:14px;padding:8px 12px}
+.btn.small{font-size:13px;padding:6px 10px;border-radius:8px}
+.log-grid{display:grid;gap:14px}
+.log-row{display:grid;gap:8px}
+.note{font-size:13px;color:var(--muted)}
+.note.err{color:var(--accent)}
+
+/* Tables */
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{padding:10px 8px;text-align:center;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;white-space:nowrap}
+td.name,th.name{text-align:left}
+td.total{font-family:var(--f-display);font-size:18px}
+td.zero{color:var(--muted)}
+td.best{font-weight:700;color:var(--good)}
+.who{display:inline-flex;align-items:center;gap:8px;font-weight:700}
+.games{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.game h3{margin:0 0 10px;font:700 16px var(--f-body);display:flex;justify-content:space-between;gap:8px}
+.game h3 .num{color:var(--muted);font-weight:500;font-size:13px}
+.bar-row{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:8px;align-items:center;padding:5px 0}
+.bar-label{display:flex;justify-content:space-between;gap:6px;font-size:14px;min-width:0}
+.bar-label span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:3px}
+.bar i{display:block;height:100%;border-radius:4px;transition:width .8s ease}
+.bar-row .num{text-align:right;font-weight:700}
+.history{list-style:none;margin:0;padding:0;display:grid}
+.history li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.history li:last-child{border-bottom:0}
+.confirm{display:inline-flex;gap:6px;align-items:center;font-size:13px}
+.setup{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.setup input{font:15px var(--f-body);padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-width:0;flex:1 1 180px}
+details summary{cursor:pointer;font-weight:700}
+@media (prefers-reduced-motion: reduce){.lane,.kart,.bar i{transition:none}.kart.boost svg,.kart.boost::before,.ticker.flash{animation:none}}
+@media (max-width:560px){.kart{width:92px}.kart svg{width:58px}.kart .tag{font-size:12px}.pos{font-size:15px;width:24px}.road{left:34px}}
+body{margin:0}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Noches de juegos de mesa</div>
+      <h1>Gran Premio de Mesa</h1>
+    </div>
+    <div class="status" id="status" aria-live="polite">Conectando…</div>
+  </header>
+
+  <section class="race" aria-labelledby="race-title">
+    <div class="race-head">
+      <h2 id="race-title">La carrera</h2>
+      <span class="eyebrow">El que más gana va adelante</span>
+    </div>
+    <div class="ticker" id="ticker" aria-live="polite">Todavía no hay victorias. La primera que se anote aparece aquí.</div>
+    <div class="track" id="track"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="gen-title">
+    <h2 id="gen-title">Tabla general</h2>
+    <div class="card scroll"><table id="general"></table></div>
+  </section>
+
+  <section class="panel" aria-labelledby="games-title">
+    <h2 id="games-title">Por juego</h2>
+    <div class="games" id="games"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="hist-title">
+    <h2 id="hist-title">Últimas victorias</h2>
+    <div class="card"><ul class="history" id="history"></ul></div>
+  </section>
+
+  </div>
+
+<script>
+const COLORS=["#e8412f","#2f7de8","#22a55b","#f2b81f","#8e4ae0","#f07a1a","#1fb8c4","#e04a9a"];
+const DEFAULT_GAMES=[{id:"uno",name:"UNO"},{id:"rummy",name:"Rummy"},{id:"ticket",name:"Ticket to Ride"},{id:"catan",name:"Catan"},{id:"monopoly",name:"Monopoly"},{id:"life",name:"Life"},{id:"golf",name:"Golf (Netflix)"}];
+const LANE_H=64;
+const S={players:[],games:DEFAULT_GAMES,wins:[],pickP:null,pickG:null,canWrite:null,db:null,confirmDel:null,loaded:false,initialDone:false};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function kartSVG(color,initial){
+  return `<svg viewBox="0 0 120 70" aria-hidden="true">
+  <path d="M8 46 L20 30 L52 28 L62 18 L82 18 L90 30 L110 34 L114 46 Z" fill="${color}"/>
+  <path d="M20 30 L52 28 L58 40 L14 42 Z" fill="rgba(0,0,0,.18)"/>
+  <rect x="96" y="22" width="18" height="6" rx="2" fill="#222"/>
+  <rect x="2" y="24" width="14" height="5" rx="2" fill="#222"/>
+  <circle cx="70" cy="12" r="11" fill="#fff"/><circle cx="70" cy="12" r="11" fill="${color}" opacity=".35"/>
+  <path d="M71 6 h9 a5 5 0 0 1 0 10 h-9 z" fill="#1d1a2e"/>
+  <text x="66" y="16" font-family="Bungee,Arial Black,sans-serif" font-size="11" fill="#1d1a2e" text-anchor="middle">${esc(initial)}</text>
+  <circle cx="26" cy="52" r="13" fill="#1a1a1a"/><circle cx="26" cy="52" r="5" fill="#bbb"/>
+  <circle cx="96" cy="52" r="13" fill="#1a1a1a"/><circle cx="96" cy="52" r="5" fill="#bbb"/>
+  </svg>`;
+}
+const pById=id=>S.players.find(p=>p.id===id);
+const gById=id=>S.games.find(g=>g.id===id);
+function counts(){
+  const tot={},per={};
+  for(const p of S.players){tot[p.id]=0;per[p.id]={};for(const g of S.games)per[p.id][g.id]=0;}
+  for(const w of S.wins){if(tot[w.player]==null)continue;tot[w.player]++;if(per[w.player][w.game]!=null)per[w.player][w.game]++;}
+  return {tot,per};
+}
+function ranking(){
+  const {tot}=counts();
+  return S.players.slice().sort((a,b)=>(tot[b.id]-tot[a.id])||a.name.localeCompare(b.name));
+}
+
+function renderRace(){
+  const track=$("track"); const {tot}=counts(); const order=ranking();
+  if(!S.players.length){track.style.height="auto";track.innerHTML=`<div class="race-empty">Agrega a los jugadores en la sección Jugadores, abajo, y aquí aparecen sus carritos.</div>`;return;}
+  const max=Math.max(1,...order.map(p=>tot[p.id]));
+  track.style.height=(order.length*LANE_H)+"px"; track.style.setProperty("--laneH",LANE_H+"px");
+  // keep existing lane nodes so moves animate
+  const keep=new Set();
+  order.forEach((p,i)=>{
+    keep.add(p.id);
+    let lane=track.querySelector(`[data-p="${p.id}"]`);
+    if(!lane){lane=document.createElement("div");lane.className="lane";lane.dataset.p=p.id;
+      lane.innerHTML=`<div class="lane-bg"></div><div class="finish"></div><div class="pos"></div><div class="road"><div class="kart"></div></div>`;
+      lane.style.top=(i*LANE_H)+"px";track.appendChild(lane);
+      lane.querySelector(".kart").style.left="0px";}
+    lane.style.top=(i*LANE_H)+"px";
+    lane.querySelector(".pos").textContent=(i+1)+"°";
+    const kart=lane.querySelector(".kart");
+    const w=tot[p.id];
+    kart.innerHTML=`${kartSVG(p.color,(p.name||"?")[0].toUpperCase())}<span class="tag">${esc(p.name)}<span class="num">${w}</span></span>`;
+    kart.setAttribute("aria-label",`${p.name}: ${w} victorias, puesto ${i+1}`);
+    const pct=w/max;
+    requestAnimationFrame(()=>{kart.style.left=`calc(${pct} * (100% - ${kart.offsetWidth||112}px))`;});
+  });
+  track.querySelectorAll(".lane").forEach(l=>{if(!keep.has(l.dataset.p))l.remove();});
+}
+
+
+function renderGeneral(){
+  const {tot,per}=counts(); const order=ranking();
+  if(!order.length){$("general").innerHTML=`<tr><td class="muted">Sin jugadores todavía.</td></tr>`;return;}
+  const bestPer={};for(const g of S.games)bestPer[g.id]=Math.max(0,...order.map(p=>per[p.id][g.id]));
+  let h=`<thead><tr><th>#</th><th class="name">Jugador</th><th>Total</th>${S.games.map(g=>`<th>${esc(g.name)}</th>`).join("")}</tr></thead><tbody>`;
+  order.forEach((p,i)=>{
+    h+=`<tr><td class="num">${i+1}</td><td class="name"><span class="who"><span class="chip dot" style="background:${p.color};padding:0;border:0"></span>${esc(p.name)}</span></td><td class="total">${tot[p.id]}</td>`+
+      S.games.map(g=>{const v=per[p.id][g.id];return `<td class="${v===0?"zero":(v===bestPer[g.id]?"best":"")}">${v}</td>`}).join("")+`</tr>`;
+  });
+  $("general").innerHTML=h+"</tbody>";
+}
+
+function renderGames(){
+  const {per}=counts();
+  $("games").innerHTML=S.games.map(g=>{
+    const rows=S.players.map(p=>({p,v:per[p.id]?.[g.id]||0})).sort((a,b)=>b.v-a.v||a.p.name.localeCompare(b.p.name));
+    const total=rows.reduce((s,r)=>s+r.v,0), max=Math.max(1,...rows.map(r=>r.v));
+    const leader=rows[0]&&rows[0].v>0&&(!rows[1]||rows[1].v<rows[0].v)?rows[0].p.name:null;
+    return `<div class="card game"><h3>${esc(g.name)} <span class="num">${total} ${total===1?"partida":"partidas"}</span></h3>
+      <div class="note" style="margin:-6px 0 6px">${leader?`Manda ${esc(leader)}`:(total?"Empate arriba":"Nadie ha ganado aún")}</div>
+      ${rows.map(r=>`<div class="bar-row"><div><div class="bar-label"><span>${esc(r.p.name)}</span></div><div class="bar"><i style="width:${r.v/max*100}%;background:${r.p.color}"></i></div></div><span class="num">${r.v}</span></div>`).join("")||`<span class="note">Sin jugadores.</span>`}
+    </div>`;
+  }).join("");
+}
+
+function fmtWhen(iso){try{const d=new Date(iso);return d.toLocaleDateString("es",{day:"numeric",month:"short"})+" · "+d.toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});}catch(e){return ""}}
+function renderHistory(){
+  const list=S.wins.slice().sort((a,b)=>(b.at||"").localeCompare(a.at||"")).slice(0,12);
+  if(!list.length){$("history").innerHTML=`<li class="muted">Aquí aparece cada victoria que anoten.</li>`;return;}
+  $("history").innerHTML=list.map(w=>{const p=pById(w.player),g=gById(w.game);
+    const del="";
+    return `<li><span><span class="who"><span class="chip dot" style="background:${p?.color||"#999"};padding:0;border:0"></span>${esc(p?.name||"Jugador borrado")}</span> ganó <b>${esc(g?.name||w.game)}</b> <span class="note">${fmtWhen(w.at)}</span></span>${del}</li>`}).join("");
+}
+function renderAll(){renderRace();renderGeneral();renderGames();renderHistory();}
+
+function announce(w){
+  const p=pById(w.player),g=gById(w.game); if(!p)return;
+  const {tot,per}=counts();
+  const t=$("ticker");
+  t.innerHTML=`🏁 <span><b>${esc(p.name)}</b> sumó una victoria en <b>${esc(g?.name||w.game)}</b>: ya lleva ${per[p.id]?.[w.game]||0} en ese juego y ${tot[p.id]} en total.</span>`;
+  t.classList.remove("flash");void t.offsetWidth;t.classList.add("flash");
+  const k=document.querySelector(`.lane[data-p="${w.player}"] .kart`);
+  if(k){k.classList.remove("boost");void k.offsetWidth;k.classList.add("boost");}
+}
+function lastLine(){
+  const w=S.wins.slice().sort((a,b)=>(b.at||"").localeCompare(a.at||""))[0];
+  if(!w){$("ticker").textContent="Todavía no hay victorias. Anoten la primera abajo.";return;}
+  const p=pById(w.player),g=gById(w.game); if(!p)return;
+  $("ticker").innerHTML=`<span>Última: <b>${esc(p.name)}</b> ganó en <b>${esc(g?.name||w.game)}</b> · ${fmtWhen(w.at)}</span>`;
+}
+
+renderAll();
+let lastCount=null;
+async function load(){
+  try{
+    const r=await fetch('data.json?t='+Date.now(),{cache:'no-store'}); if(!r.ok)throw 0; const d=await r.json();
+    S.players=d.players||[]; S.games=d.games&&d.games.length?d.games:DEFAULT_GAMES;
+    S.wins=(d.wins||[]).map((w,i)=>({id:String(i),...w}));
+    renderAll();
+    if(lastCount!==null&&S.wins.length>lastCount){const nw=S.wins.slice(lastCount).sort((a,b)=>(b.at||'').localeCompare(a.at||''));setTimeout(()=>announce(nw[0]),300);}
+    else if(lastCount===null)lastLine();
+    lastCount=S.wins.length;
+    $('status').textContent='En vivo · '+S.wins.length+' victorias · se actualiza solo';
+  }catch(e){$('status').textContent='Sin conexión, reintentando…';}
+}
+load(); setInterval(()=>{if(!document.hidden)load();},20000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});
+</script>
+</body>
+</html>
