@@ -3,7 +3,8 @@
     {
       "id": "luis",
       "name": "Luis",
-      "color": "#e8412f"
+      "color": "#e8412f",
+      "photo": "img/luis.jpg"
     },
     {
       "id": "doriana",
