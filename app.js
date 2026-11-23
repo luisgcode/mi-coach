@@ -954,6 +954,7 @@ function viewSession(s) {
   for (const w of s.warnings || []) h += `<p class="small warn" style="margin:6px 0 0">${esc(w)}</p>`;
   h += `</section>`;
   if (s.opener) h += viewOpener(s);
+  else if (s.location !== 'casa') h += `<section class="card"><p class="small ink2" style="margin:0 0 6px">Esta sesión no tiene el arranque HIIT.</p><button class="primary full" data-act="addOpener">Agregar arranque HIIT</button></section>`;
   (s.items || []).forEach((it, i) => { h += viewItem(s, it, i); });
   if (s.cardio) h += viewCardio(s);
   if (s.finisher) h += viewFinisher(s);
@@ -1026,6 +1027,7 @@ function viewOpener(s) {
   h += `<button class="chk ${o.done ? 'done' : ''}" style="width:auto;padding:0 14px;margin-top:8px" data-act="openerDone" aria-pressed="${!!o.done}">${o.done ? '✓ Hecho' : 'Marcar hecho'}</button></section>`;
   return h;
 }
+ACTIONS.addOpener = () => writeSess(curSessId(), s => { if (s.opener) return false; s.opener = buildOpener({ eqIds: new Set(availEquipment().map(q => q.id)), energy: s.energy, tomorrowFootball: tomorrowFootball(), sessions: sessionsArr(), heavyLegs: s.template === 'A' }); });
 ACTIONS.openerDone = () => writeSess(curSessId(), s => { if (!s.opener) return false; s.opener.done = !s.opener.done; });
 // Timeline: [work move1, rest, work move2, rest, ..., round rest, ...]; ticks once per second and only touches the timer DOM.
 function hiitSteps(o) {
