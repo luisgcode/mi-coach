@@ -360,12 +360,21 @@ function lastLogFor(exId, sessions, beforeDate) {
 }
 function timesDone(exId, sessions) { let n = 0; for (const s of sessions) if ((s.items || []).some(it => it.exId === exId)) n++; return n; }
 
-// Ranked replacements for one exercise: same movement pattern first, then shared muscles; ties prefer ones with a real photo.
+// Muscle tags -> broad group, so 'hombro lateral' matches 'hombros', 'glúteo medio' matches 'glúteos', etc.
+const MUSCLE_GROUP = [[/gl[uú]te/, 'gluteos'], [/cu[aá]dr/, 'cuadriceps'], [/isquio/, 'isquios'], [/pantorr/, 'pantorrillas'], [/aductor/, 'aductores'], [/pecho/, 'pecho'], [/dorsal|espalda media|trapecio/, 'espalda'], [/deltoide posterior/, 'hombro-post'], [/hombro|deltoide/, 'hombros'], [/b[ií]ceps|braquial|antebrazo/, 'biceps'], [/tr[ií]ceps/, 'triceps'], [/core|oblicuo|abdom/, 'core'], [/espalda baja|lumbar/, 'lumbar']];
+function muscleGroup(m) { const n = norm(m); const g = MUSCLE_GROUP.find(([re]) => re.test(n)); return g ? g[1] : n; }
+// Ranked replacements for one exercise. The main muscle (first tag) decides: a triceps pushdown is replaced by triceps work,
+// not by a chest press that also hits triceps. Then exact shared tags, same group, same pattern; ties prefer a real photo.
 function similarExercises(ex, pool, exclude = [], n = 5) {
-  const mus = new Set((ex.muscles || []).map(norm));
+  const tags = (ex.muscles || []).map(norm), groups = new Set((ex.muscles || []).map(muscleGroup)), main = ex.muscles && ex.muscles.length ? muscleGroup(ex.muscles[0]) : null;
   return pool.filter(e => e.id !== ex.id && !e.blocked && !exclude.includes(e.id) && e.pattern !== 'cardio')
-    .map(e => ({ e, s: (e.pattern === ex.pattern ? 10 : 0) + (e.muscles || []).filter(m => mus.has(norm(m))).length + ((e.photos || []).length ? 0.5 : 0) }))
-    .filter(x => x.s >= 1).sort((a, b) => b.s - a.s).slice(0, n).map(x => x.e);
+    .map(e => {
+      const em = e.muscles || [], eMain = em.length ? muscleGroup(em[0]) : null;
+      const shared = em.filter(m => tags.includes(norm(m))).length, sharedG = new Set(em.map(muscleGroup).filter(g => groups.has(g))).size;
+      const s = (main && eMain === main ? 6 : 0) + shared * 2 + sharedG + (e.pattern === ex.pattern ? 2 : 0) + ((e.photos || []).length ? 0.5 : 0);
+      return { e, s, ok: sharedG > 0 || (!groups.size && e.pattern === ex.pattern) };
+    })
+    .filter(x => x.ok).sort((a, b) => b.s - a.s).slice(0, n).map(x => x.e);
 }
 function similarExercise(ex, pool, exclude = []) { return similarExercises(ex, pool, exclude, 1)[0] || null; }
 // Backups for a whole session: exercises not in it that best replace its items (one ranked pass per item, interleaved).
@@ -439,7 +448,8 @@ function buildSession(args) {
   const slots = home ? HOME_SLOTS : T.slots;
   slots.forEach((slot, si) => {
     if (chosen.length >= slotsN) return;
-    const cand0 = usable.filter(e => slot.p.includes(e.pattern) && !chosen.includes(e));
+    // Reserve exercises (reserve: true) are for swaps and backups; the plan only uses them when nothing else fits a slot.
+    const candAll = usable.filter(e => slot.p.includes(e.pattern) && !chosen.includes(e)), cand0 = candAll.some(e => !e.reserve) ? candAll.filter(e => !e.reserve) : candAll;
     const cand = slot.re && cand0.some(e => slot.re.test(norm(e.name))) ? cand0.filter(e => slot.re.test(norm(e.name))) : cand0;
     cand.sort((a, b) => a.id < b.id ? -1 : 1);
     if (!cand.length) return;
@@ -450,7 +460,7 @@ function buildSession(args) {
   });
   // Fill remaining slots with anything that fits the day's patterns (glutes first on A/C).
   const tplPats = [...new Set(slots.flatMap(s => s.p))];
-  const rest = usable.filter(e => !chosen.includes(e)).map(e => ({ e, s: (tplPats.includes(e.pattern) ? 2 : 0) + ((e.muscles || []).some(m => /glút|glut/i.test(m)) && tKey !== 'B' ? 1 : 0) + ((wk * 7 + e.id.length) % 3) * 0.1 })).filter(x => x.s >= 2).sort((a, b) => b.s - a.s);
+  const rest = usable.filter(e => !chosen.includes(e) && !e.reserve).map(e => ({ e, s: (tplPats.includes(e.pattern) ? 2 : 0) + ((e.muscles || []).some(m => /glút|glut/i.test(m)) && tKey !== 'B' ? 1 : 0) + ((wk * 7 + e.id.length) % 3) * 0.1 })).filter(x => x.s >= 2).sort((a, b) => b.s - a.s);
   for (const x of rest) { if (chosen.length >= slotsN) break; chosen.push(x.e); }
   // Balance push/pull: never more than one extra push over pull (and vice versa).
   const isPush = e => PUSH.includes(e.pattern), isPull = e => PULL.includes(e.pattern);
