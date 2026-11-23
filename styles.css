@@ -107,18 +107,12 @@ body.kb .tabs{display:none}
 .chk.done{background:var(--good);border-color:var(--good);color:#fff}
 .setrow input{text-align:center;font-family:"Barlow Semi Condensed",sans-serif;font-size:19px}
 .exhead{display:flex;gap:10px;align-items:flex-start}
-.exhead .fig-sm{flex:none}
 details.how{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
 details.how summary{cursor:pointer;min-height:40px;display:flex;align-items:center;font-weight:600;color:var(--accent)}
 details.how ul{margin:4px 0 8px;padding-left:20px}
 details.how li{margin:3px 0}
-.fig{display:block;color:var(--ink)}
-.fig-md{width:100%;max-width:260px;height:auto;margin:6px auto}
-.fig-sm{width:72px;height:48px;background:var(--surface2);border-radius:10px}
-.fig .fig-body polyline,.fig .fig-body circle{fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
-.fig .fig-props path{fill:none;stroke:var(--muted);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
-.fig .fig-arrow line{stroke:var(--accent);stroke-width:2;stroke-dasharray:3 3}
-.fig .fig-arrow circle{fill:var(--accent)}
+.exopt{display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.exopt .exthumb{width:56px;height:56px}
 .thumb{width:64px;height:64px;object-fit:cover;border-radius:10px;background:var(--surface2);flex:none}
 .thumb.sm{width:40px;height:40px}
 .eqlist{list-style:none;margin:6px 0;padding:0}

@@ -1,40 +1,10 @@
 'use strict';
 /* Mi Coach web app. Pure logic lives in calc.js; backend access only through Platform (store/ai/files). */
 
-/* =====================================================================
-   STICK-FIGURE ILLUSTRATIONS (hand-drawn data, inline SVG, theme colored)
-   viewBox 0 0 120 80. body = polylines, props = equipment in muted ink.
-   ===================================================================== */
-const FIGS = {
-  bridge: { head: [26, 37], body: [[33, 43, 62, 38, 82, 40, 84, 66], [40, 42, 52, 52]], props: ['M8 46h30v6H8z', 'M54 33h16'], arrow: [62, 30, 62, 18], cap: 'Hombros en el banco, empuja la cadera arriba' },
-  squat: { head: [60, 13], body: [[60, 22, 53, 45, 72, 50, 66, 70], [60, 26, 82, 30]], props: [], arrow: null, cap: 'Cadera atrás y abajo, rodillas siguen la punta del pie' },
-  jump: { head: [60, 13], body: [[60, 22, 53, 45, 72, 50, 66, 70], [60, 26, 46, 40]], props: [], arrow: [88, 60, 88, 26], cap: 'Baja rápido y explota hacia arriba' },
-  leg_press: { head: [20, 39], body: [[27, 44, 47, 57, 63, 37, 80, 40], [30, 46, 42, 60]], props: ['M10 60l40 6', 'M84 26l6 28'], arrow: [68, 50, 88, 50], cap: 'Espalda pegada al asiento, empuja la plataforma' },
-  lunge: { head: [60, 9], body: [[60, 18, 60, 42, 78, 52, 78, 70], [60, 42, 48, 63, 34, 67], [60, 22, 60, 40]], props: [], arrow: [96, 30, 96, 56], cap: 'Torso alto, baja la rodilla de atrás' },
-  hinge: { head: [79, 24], body: [[71, 28, 46, 31, 48, 51, 48, 70], [70, 30, 70, 52]], props: ['M64 54h12'], arrow: [92, 50, 92, 26], cap: 'Cadera atrás, espalda neutra, peso pegado a las piernas' },
-  kickback: { head: [30, 27], body: [[36, 31, 60, 36, 60, 54, 60, 70], [60, 36, 84, 28], [38, 33, 34, 50]], props: ['M100 20v50'], arrow: [86, 40, 98, 24], cap: 'Pierna atrás desde la cadera, sin arquear la espalda' },
-  abduction: { head: [60, 10], body: [[60, 19, 60, 41, 56, 70], [60, 41, 80, 66], [60, 24, 46, 34]], props: ['M36 34h10'], arrow: [86, 56, 100, 52], cap: 'Lleva la pierna hacia afuera con el glúteo' },
-  row: { head: [40, 21], body: [[42, 30, 40, 55, 62, 52, 78, 60], [42, 33, 30, 41, 50, 41]], props: ['M50 41h50', 'M100 30v30', 'M28 58h22'], arrow: [70, 34, 50, 34], cap: 'Pecho alto, codos atrás, junta omóplatos' },
-  press: { head: [22, 45], body: [[31, 46, 64, 46, 80, 46, 84, 68], [36, 46, 36, 22]], props: ['M14 51h62v5H14z', 'M24 22h24'], arrow: [56, 36, 56, 16], cap: 'Pies firmes, baja controlado y empuja' },
-  pulldown: { head: [60, 25], body: [[60, 33, 60, 56, 78, 56, 80, 72], [60, 36, 46, 26, 44, 12], [60, 36, 74, 26, 76, 12]], props: ['M30 12h60', 'M60 12V2', 'M50 60h22'], arrow: [100, 14, 100, 36], cap: 'Jala la barra al pecho con los codos' },
-  plank: { head: [22, 51], body: [[30, 55, 66, 58, 98, 62], [30, 56, 30, 68, 42, 68]], props: ['M10 70h100'], arrow: null, cap: 'Línea recta de cabeza a talones, abdomen firme' },
-  rotation: { head: [50, 11], body: [[50, 20, 50, 44, 42, 70], [50, 44, 60, 70], [50, 24, 82, 30]], props: ['M100 20v50', 'M82 30l18-4'], arrow: [30, 34, 70, 34], cap: 'Gira desde el torso, cadera estable' },
-  treadmill: { head: [58, 9], body: [[56, 18, 52, 40, 64, 50, 60, 63], [52, 40, 44, 52, 38, 63], [56, 22, 66, 32], [56, 22, 46, 30]], props: ['M18 66h86v4H18z', 'M98 66L90 22h10'], arrow: null, cap: 'Postura alta, pasos cortos' },
-  carry: { head: [60, 10], body: [[60, 19, 60, 42, 54, 70], [60, 42, 66, 70], [60, 23, 72, 44]], props: ['M68 46h8'], arrow: [90, 60, 106, 60], cap: 'Camina erguido, abdomen firme' }
-};
-const PATTERN_FIG = { leg_curl: 'hinge', curl: 'row', hip_thrust: 'bridge', squat: 'squat', leg_press: 'leg_press', jump: 'jump', lunge: 'lunge', hinge: 'hinge', glute_iso: 'kickback', abduction: 'abduction', row: 'row', press: 'press', pulldown: 'pulldown', core: 'plank', rotation: 'rotation', carry: 'carry', cardio: 'treadmill', other: 'squat' };
-function figSVG(pattern, size = 'md') {
-  const f = FIGS[PATTERN_FIG[pattern] || 'squat'];
-  const pl = pts => { let s = ''; for (let i = 0; i < pts.length; i += 2) s += (i ? ' ' : '') + pts[i] + ',' + pts[i + 1]; return s; };
-  const body = f.body.map(p => `<polyline points="${pl(p)}"/>`).join('');
-  const props = f.props.map(d => `<path d="${d}"/>`).join('');
-  const ar = f.arrow ? `<g class="fig-arrow"><line x1="${f.arrow[0]}" y1="${f.arrow[1]}" x2="${f.arrow[2]}" y2="${f.arrow[3]}"/><circle cx="${f.arrow[2]}" cy="${f.arrow[3]}" r="2.6"/></g>` : '';
-  return `<svg class="fig fig-${size}" viewBox="0 0 120 80" role="img" aria-label="${esc(f.cap)}"><g class="fig-props">${props}</g><g class="fig-body">${body}<circle cx="${f.head[0]}" cy="${f.head[1]}" r="6"/></g>${ar}</svg>`;
-}
+/* Exercise images: real start/end photos (free-exercise-db, public domain) in img/ex, listed in each exercise doc as photos[]. No photo -> nothing (never a generic drawing). */
 function exPhotos(ex) { return (ex && Array.isArray(ex.photos) && ex.photos.length) ? ex.photos.slice(0, 2) : null; }
-function exThumb(ex, pattern) { const p = exPhotos(ex); return p ? `<img class="exthumb" src="${esc(p[p.length - 1])}" alt="" loading="lazy">` : figSVG(pattern, 'sm'); }
-function exGuidePics(ex, pattern) { const p = exPhotos(ex); if (!p) return `${figSVG(pattern, 'md')}<p class="tiny muted" style="text-align:center;margin:0">${esc(figCaption(pattern))}</p>`; const lab = ['1. Empieza así', '2. Termina así']; return `<div class="expics">${p.map((u, k) => `<figure><img src="${esc(u)}" alt="${esc(ex.name)}: ${lab[k] || ''}" loading="lazy"><figcaption class="tiny muted">${p.length > 1 ? lab[k] : ''}</figcaption></figure>`).join('')}</div>`; }
-function figCaption(pattern) { return (FIGS[PATTERN_FIG[pattern] || 'squat'] || {}).cap || ''; }
+function exThumb(ex) { const p = exPhotos(ex); return p ? `<img class="exthumb" src="${esc(p[p.length - 1])}" alt="" loading="lazy">` : ''; }
+function exGuidePics(ex) { const p = exPhotos(ex); if (!p) return ''; const lab = ['1. Empieza así', '2. Termina así']; return `<div class="expics">${p.map((u, k) => `<figure><img src="${esc(u)}" alt="${esc(ex.name)}: ${lab[k] || ''}" loading="lazy"><figcaption class="tiny muted">${p.length > 1 ? lab[k] : ''}</figcaption></figure>`).join('')}</div>`; }
 
 
 /* =====================================================================
@@ -984,6 +954,8 @@ function viewSession(s) {
   (s.items || []).forEach((it, i) => { h += viewItem(s, it, i); });
   if (s.cardio) h += viewCardio(s);
   if (s.finisher) h += viewFinisher(s);
+  const backups = sessionBackups(s.items || [], sessPool(s), 5);
+  if (backups.length) h += `<section class="card" aria-labelledby="h-bk"><h3 id="h-bk" style="margin:0 0 4px">Backups de hoy</h3><p class="tiny muted" style="margin:0 0 6px">Si uno no te late, toca "Cambiar ejercicio" en su tarjeta, o agrega uno de estos.</p>${backups.map(e => exOption(e, 'addBackup', e.id, 'Agregar')).join('')}</section>`;
   const others = exArr().filter(e => !e.blocked && e.pattern !== 'cardio' && exUsable(e) && (s.location === 'casa' ? e.location === 'casa' : e.location !== 'casa') && !(s.items || []).some(it => it.exId === e.id));
   if (others.length) h += `<section class="card"><label for="addEx">Agregar ejercicio</label><div class="row nw"><select id="addEx" class="grow">${others.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select><button data-act="addExToSession">Agregar</button></div></section>`;
   const c1 = confirmBtns('finish', 'finishSession', s.id, 'Sí, terminar'), c2 = confirmBtns('discard', 'discardSession', s.id, 'Sí, descartar');
@@ -994,9 +966,7 @@ function howToBlock(ex, it, s, forceOpen) {
   const open = forceOpen || timesDone(ex.id, sessionsArr()) <= 3;
   const ho = ex.howto;
   const focus = (s && s.focus) || [];
-  let h = `<details class="how" ${open ? 'open' : ''}><summary>Cómo se hace</summary>${exGuidePics(ex, ex.pattern || it.pattern)}`;
-  const eq = eqArr().find(q => (ex.equipmentIds || []).includes(q.id) && q.photoId);
-  if (eq) h += `<p class="tiny muted" style="margin:8px 0 2px">📷 La máquina en tu gym (tu foto):</p><img class="photo" src="${esc(files.urlFor(eq.photoId))}" alt="Foto de tu ${esc(eq.name)}" loading="lazy">`;
+  let h = `<details class="how" ${open ? 'open' : ''}><summary>Cómo se hace</summary>${exGuidePics(ex)}`;
   if (ho) {
     if ((ho.setup || []).length) h += `<b class="small">Preparación</b><ul class="small">${ho.setup.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
     if ((ho.execution || []).length) h += `<b class="small">Ejecución</b><ul class="small">${ho.execution.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
@@ -1014,7 +984,7 @@ function viewItem(s, it, i) {
   const ex = cache.get('exercises/' + it.exId) ? { id: it.exId, ...cache.get('exercises/' + it.exId) } : { id: it.exId, name: it.name, pattern: it.pattern };
   const unit = itemDisplayUnit(it), list = (it.planned && it.planned.list) || [];
   const planTxt = list.length && (list[0].w || list[0].kg) ? describeSets(list) : `${it.planned.sets}×${it.planned.reps}`;
-  let h = `<section class="card" aria-labelledby="h-it${i}"><div class="exhead">${exThumb(cache.get('exercises/' + it.exId), it.pattern)}<div class="grow"><h3 id="h-it${i}">${esc(it.name)}${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.isNew ? ' <span class="pill warn">nuevo</span>' : ''}</h3>${it.group ? `<div class="tiny ink2">${esc(it.group)}</div>` : ''}<div class="small"><b>Plan:</b> ${esc(planTxt)}</div><div class="tiny muted">${esc(it.why || '')}</div></div></div>`;
+  let h = `<section class="card" aria-labelledby="h-it${i}"><div class="exhead">${exThumb(cache.get('exercises/' + it.exId))}<div class="grow"><h3 id="h-it${i}">${esc(it.name)}${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.isNew ? ' <span class="pill warn">nuevo</span>' : ''}</h3>${it.group ? `<div class="tiny ink2">${esc(it.group)}</div>` : ''}<div class="small"><b>Plan:</b> ${esc(planTxt)}</div><div class="tiny muted">${esc(it.why || '')}</div></div></div>`;
   h += howToBlock(ex, it, s);
   h += `<div class="row sp" style="margin-top:10px"><span class="small ink2">Series</span><span class="row"><span class="tiny muted">Unidad</span><button class="chip" style="min-height:36px" data-act="setUnit" data-arg="${i}.kg" aria-pressed="${unit === 'kg'}">kg</button><button class="chip" style="min-height:36px" data-act="setUnit" data-arg="${i}.lb" aria-pressed="${unit === 'lb'}">lb</button></span></div>`;
   (it.sets || []).forEach((st, j) => {
@@ -1034,7 +1004,11 @@ function viewItem(s, it, i) {
   if (aiOn()) h += `<div class="row nw" style="margin-top:8px"><label class="sr" for="ft-${i}">Escribe lo que hiciste</label><input id="ft-${i}" class="grow" placeholder="Ej: hice 3 con 5 kg y la última con 12"><button class="sm" data-act="parseSets" data-arg="${i}" ${ui.parseBusy === i ? 'disabled' : ''}>${ui.parseBusy === i ? '…' : 'Anotar'}</button></div>`;
   const nx = nextStrength({ ...it, planned: it.planned }, { unit });
   if (nx && (it.sets || []).some(x => num(x.reps) > 0)) h += `<p class="small" style="margin:8px 0 0"><b>Próxima vez:</b> ${nx.action === 'block' ? 'bloquear y cambiar' : esc(nx.text)} <span class="tiny muted">${esc(nx.why)}</span></p>`;
-  h += `<div class="row" style="margin-top:8px"><button class="sm ghost" data-act="swapEx" data-arg="${i}">Cambiar ejercicio</button><button class="sm ghost" data-act="removeItem" data-arg="${i}">Quitar</button></div>`;
+  h += `<div class="row" style="margin-top:8px"><button class="sm ghost" data-act="swapPick" data-arg="${i}" aria-expanded="${ui.swapPick === i}">Cambiar ejercicio</button><button class="sm ghost" data-act="removeItem" data-arg="${i}">Quitar</button></div>`;
+  if (ui.swapPick === i) {
+    const opts = similarExercises(ex, sessPool(s), (s.items || []).map(x => x.exId), 5);
+    h += opts.length ? `<div class="swaplist"><p class="tiny muted" style="margin:8px 0 4px">Elige el reemplazo:</p>${opts.map(e => exOption(e, 'swapTo', i + '.' + e.id, 'Usar')).join('')}</div>` : '<p class="small muted">No tengo otro ejercicio parecido con tu equipo.</p>';
+  }
   return h + `</section>`;
 }
 function viewFinisher(s) {
@@ -1049,7 +1023,7 @@ ACTIONS.setFinisherChk = (f, el) => writeSess(curSessId(), s => { s.finisher[f] 
 ACTIONS.finisherDone = () => writeSess(curSessId(), s => { s.finisher.done = !s.finisher.done; });
 function viewCardio(s) {
   const c = s.cardio;
-  return `<section class="card" aria-labelledby="h-card"><div class="exhead">${figSVG('cardio', 'sm')}<div class="grow"><h3 id="h-card">Intervalos en cinta</h3><div class="small"><b>Plan:</b> ${esc(c.text || '')}</div><div class="tiny muted">${esc(c.why || '')}</div></div></div>
+  return `<section class="card" aria-labelledby="h-card"><div class="exhead">${exThumb(cache.get('exercises/treadmill-intervals'))}<div class="grow"><h3 id="h-card">Intervalos en cinta</h3><div class="small"><b>Plan:</b> ${esc(c.text || '')}</div><div class="tiny muted">${esc(c.why || '')}</div></div></div>
   <div class="grid3" style="margin-top:8px"><div class="field"><label for="c-run">Trote min</label><input id="c-run" type="number" inputmode="decimal" value="${esc(c.runMin)}" data-change="setCardio" data-arg="runMin"></div><div class="field"><label for="c-walk">Caminata min</label><input id="c-walk" type="number" inputmode="decimal" value="${esc(c.walkMin)}" data-change="setCardio" data-arg="walkMin"></div><div class="field"><label for="c-rounds">Rondas</label><input id="c-rounds" type="number" inputmode="numeric" value="${esc(c.rounds)}" data-change="setCardio" data-arg="rounds"></div></div>
   <p class="small ink2" style="margin:8px 0 4px">¿Cómo salió?</p><div class="chips">${FEELS.slice(0, 3).map(([k, l]) => `<button class="chip" data-act="cardioFeel" data-arg="${k}" aria-pressed="${c.feel === k}">${l}</button>`).join('')}</div>
   <label class="row small" style="margin:8px 0 0"><input type="checkbox" data-change="setCardioChk" data-arg="completed" ${c.completed !== false ? 'checked' : ''}> Completé todas las rondas</label>
@@ -1088,10 +1062,10 @@ ACTIONS.setFeel = arg => {
   if (f === 'dolor') { ui.painOffer = +i; render(); }
 };
 ACTIONS.closePain = () => { ui.painOffer = null; render(); };
-function swapItem(s, i) {
+function swapItem(s, i, altId) {
   const it = s.items[i]; const ex = { id: it.exId, ...(cache.get('exercises/' + it.exId) || { pattern: it.pattern, name: it.name }) };
   const pool = exArr().filter(e => exUsable(e) && (s.location === 'casa' ? e.location === 'casa' : e.location !== 'casa'));
-  const alt = similarExercise(ex, pool, s.items.map(x => x.exId));
+  const alt = altId ? pool.find(e => e.id === altId) : similarExercise(ex, pool, s.items.map(x => x.exId));
   if (!alt) return null;
   const sets = it.planned.sets || 3, reps = DEFAULT_REPS[alt.pattern] || 10;
   s.items[i] = { exId: alt.id, name: alt.name, pattern: alt.pattern, vigorous: !!alt.vigorous, swappedFrom: it.name, planned: { sets, reps, kg: null, w: null, unit: 'kg', list: Array.from({ length: sets }, () => ({ reps, kg: null, w: null, unit: 'kg' })) }, why: `En lugar de ${it.name}. Elige un peso con el que te sobren 2 reps.`, sets: Array.from({ length: sets }, () => ({ reps: '', w: '', unit: 'kg', done: false })), feel: null };
@@ -1117,14 +1091,23 @@ ACTIONS.swapEx = i => {
   let alt = null;
   writeSess(s.id, cur => { alt = swapItem(cur, +i); return alt ? undefined : false; }).then(() => { if (!alt) toast('No tengo otro ejercicio parecido con tu equipo.'); else { toast('Cambiado por ' + alt.name + '.'); if (!cache.get('exercises/' + alt.id)?.howto && aiOn()) generateHowTo([alt.id]); } });
 };
+ACTIONS.swapPick = i => { ui.swapPick = ui.swapPick === +i ? null : +i; render(); };
+ACTIONS.swapTo = arg => {
+  const k = arg.indexOf('.'), i = +arg.slice(0, k), altId = arg.slice(k + 1), s = activeSession(); if (!s) return; ui.swapPick = null;
+  let alt = null;
+  writeSess(s.id, cur => { alt = swapItem(cur, i, altId); return alt ? undefined : false; }).then(() => { if (alt) { toast('Cambiado por ' + alt.name + '.'); if (!cache.get('exercises/' + alt.id)?.howto && aiOn()) generateHowTo([alt.id]); } });
+};
+function sessPool(s) { return exArr().filter(e => exUsable(e) && (s.location === 'casa' ? e.location === 'casa' : e.location !== 'casa')); }
+function exOption(e, act, arg, btn) { return `<div class="exopt">${exThumb(e)}<div class="grow small"><b>${esc(e.name)}</b><div class="tiny muted">${esc((e.muscles || []).join(', '))}</div></div><button class="sm" data-act="${act}" data-arg="${esc(arg)}">${btn}</button></div>`; }
 ACTIONS.blockEx = i => {
   const s = activeSession(); if (!s) return; const it = s.items[+i]; ui.painOffer = null;
   writeDoc('exercises/' + it.exId, cur => cur ? { ...cur, blocked: true, blockedReason: 'dolor', blockedAt: today() } : null);
   ACTIONS.swapEx(i);
 };
 ACTIONS.removeItem = i => writeSess(curSessId(), s => { s.items.splice(+i, 1); });
-ACTIONS.addExToSession = () => {
-  const e = cache.get('exercises/' + val('addEx')); if (!e) return; const id = val('addEx');
+ACTIONS.addBackup = id => ACTIONS.addExToSession(id);
+ACTIONS.addExToSession = pick => {
+  const id = typeof pick === 'string' && pick ? pick : val('addEx'), e = cache.get('exercises/' + id); if (!e) return;
   const s = activeSession(); const last = lastLogFor(id, sessionsArr(), s.date);
   const prog = nextStrength(last);
   const list = prog && prog.action !== 'block' ? prog.sets : Array.from({ length: 3 }, () => ({ reps: DEFAULT_REPS[e.pattern] || 10, kg: null, w: null, unit: 'kg' }));

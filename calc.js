@@ -332,12 +332,20 @@ function lastLogFor(exId, sessions, beforeDate) {
 }
 function timesDone(exId, sessions) { let n = 0; for (const s of sessions) if ((s.items || []).some(it => it.exId === exId)) n++; return n; }
 
-function similarExercise(ex, pool, exclude = []) {
-  const cand = pool.filter(e => e.id !== ex.id && !e.blocked && !exclude.includes(e.id) && e.pattern !== 'cardio');
-  const same = cand.find(e => e.pattern === ex.pattern);
-  if (same) return same;
+// Ranked replacements for one exercise: same movement pattern first, then shared muscles; ties prefer ones with a real photo.
+function similarExercises(ex, pool, exclude = [], n = 5) {
   const mus = new Set((ex.muscles || []).map(norm));
-  return cand.map(e => ({ e, s: (e.muscles || []).filter(m => mus.has(norm(m))).length })).filter(x => x.s > 0).sort((a, b) => b.s - a.s)[0]?.e || null;
+  return pool.filter(e => e.id !== ex.id && !e.blocked && !exclude.includes(e.id) && e.pattern !== 'cardio')
+    .map(e => ({ e, s: (e.pattern === ex.pattern ? 10 : 0) + (e.muscles || []).filter(m => mus.has(norm(m))).length + ((e.photos || []).length ? 0.5 : 0) }))
+    .filter(x => x.s >= 1).sort((a, b) => b.s - a.s).slice(0, n).map(x => x.e);
+}
+function similarExercise(ex, pool, exclude = []) { return similarExercises(ex, pool, exclude, 1)[0] || null; }
+// Backups for a whole session: exercises not in it that best replace its items (one ranked pass per item, interleaved).
+function sessionBackups(items, pool, n = 5) {
+  const used = items.map(it => it.exId || it.id), out = [];
+  const lists = items.map(it => similarExercises({ id: it.exId || it.id, pattern: it.pattern, muscles: it.muscles || (pool.find(e => e.id === (it.exId || it.id)) || {}).muscles }, pool, used, n));
+  for (let r = 0; out.length < n && lists.some(l => l[r]); r++) for (const l of lists) if (l[r] && !out.includes(l[r]) && out.length < n) out.push(l[r]);
+  return out;
 }
 function weekIndex(date) { return Math.max(0, Math.floor(daysBetween('2026-11-09', weekStart(date || '2026-11-09')) / 7)); }
 // Small deterministic PRNG for the "sorpresa" session.
@@ -925,4 +933,4 @@ function chatTurns(messages, max = 10) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { metricStatus, lighter, weekendRebound, pantryKey, applyPantry, chatMsgId, chatMsgPath, chatTurns, TEMPLATES, canonicalActivity, blockedEquipmentIds, goalPaused, ACTIVITIES, pickFlexActivity, activeBlockedActivities, goalProgress, nextGoalProposal, streaks, movementOptions, pickMovement, FINISHERS, weekIndex, toKg, kgOf, tzNow, addDays, daysBetween, weekStart, dowIndex, strengthKcal, activityKcal, footballStats, sessionKcal, dayBalance, nextStrength, nextRunWalk, describeSets, buildSession, weightSeries, rolling7, learnMealTimes, weekStats, computeNudges, prsFrom, goalsFrom, DEFAULT_RULES, mealSlot };
+if (typeof module !== 'undefined') module.exports = { similarExercise, similarExercises, sessionBackups, metricStatus, lighter, weekendRebound, pantryKey, applyPantry, chatMsgId, chatMsgPath, chatTurns, TEMPLATES, canonicalActivity, blockedEquipmentIds, goalPaused, ACTIVITIES, pickFlexActivity, activeBlockedActivities, goalProgress, nextGoalProposal, streaks, movementOptions, pickMovement, FINISHERS, weekIndex, toKg, kgOf, tzNow, addDays, daysBetween, weekStart, dowIndex, strengthKcal, activityKcal, footballStats, sessionKcal, dayBalance, nextStrength, nextRunWalk, describeSets, buildSession, weightSeries, rolling7, learnMealTimes, weekStats, computeNudges, prsFrom, goalsFrom, DEFAULT_RULES, mealSlot };
