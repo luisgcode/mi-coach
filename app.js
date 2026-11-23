@@ -443,6 +443,8 @@ document.addEventListener('click', ev => {
   if (!el || el.disabled) return;
   const fn = ACTIONS[el.dataset.act];
   if (!fn) return;
+  // Taps inside a sheet bubble up to its backdrop: let links, <summary>, checkboxes and selects work normally.
+  if (el.dataset.act === 'sheetBg' && ev.target !== el) return;
   ev.preventDefault();
   try { fn(el.dataset.arg, el, ev); } catch (e) { console.error(e); toast('Ups, algo falló.'); }
 });
@@ -503,7 +505,11 @@ function render() {
     v.className = ui.tab === 'hoy' || ui.tab === 'gym' ? 'cols' : 'narrow';
     v.innerHTML = ui.tab === 'gym' ? viewGym() : ui.tab === 'progreso' ? viewProgreso() : ui.tab === 'chat' ? viewChat() : viewHoy();
   }
-  $('#sheetHost').innerHTML = ui.sheet ? viewSheet(ui.sheet) : '';
+  // Keep the sheet's scroll position when it re-renders (realtime refetch, minute tick, timer state).
+  const host = $('#sheetHost'), oldPanel = host.querySelector('.panel'), keep = oldPanel && host.dataset.kind === ui.sheet ? oldPanel.scrollTop : 0;
+  host.innerHTML = ui.sheet ? viewSheet(ui.sheet) : '';
+  host.dataset.kind = ui.sheet || '';
+  if (keep) { const np = host.querySelector('.panel'); if (np) np.scrollTop = keep; }
   if (ui.tab === 'progreso') bindCharts();
   if (ui.tab === 'chat') { growChatIn(); chatToBottom(); }
   chatEnsureSubs();
@@ -815,8 +821,10 @@ const FEELS = [['facil', 'Fácil'], ['bien', 'Bien'], ['dificil', 'Difícil'], [
 const ENERGY = [['bien', 'Bien'], ['normal', 'Normal'], ['cansado', 'Cansado']];
 function activeSession() { const t = today(); return sessionsArr().filter(s => s.date === t && s.status === 'active').slice(-1)[0] || null; }
 function availEquipment() { return eqArr().filter(e => e.available !== false); }
+// Equipment you can train with today: available and not tied to a blocked activity (e.g. rope while 'cuerda' is blocked).
+function usableEquipment() { const bl = blockedEquipmentIds(cfg('rules'), today()); return availEquipment().filter(e => !bl.has(e.id)); }
 function missingEquipment() { return eqArr().filter(e => e.available === false); }
-function exUsable(e) { const ids = new Set(availEquipment().map(q => q.id)); return (e.equipmentIds || []).every(id => ids.has(id)); }
+function exUsable(e) { const ids = new Set(usableEquipment().map(q => q.id)); return (e.equipmentIds || []).every(id => ids.has(id)); }
 function tomorrowFootball() { const p = cfg('plan').days[DOW_KEYS[(tzNow().dow + 1) % 7]]; return !!(p && p.kind === 'football'); }
 // Football yesterday: from the plan or from a logged match.
 function yesterdayFootball() { const p = cfg('plan').days[DOW_KEYS[(tzNow().dow + 6) % 7]]; const y = dayOf(addDays(today(), -1)) || {}; return !!((p && p.kind === 'football') || (y.activities || []).some(a => a.type === 'football')); }
@@ -858,7 +866,8 @@ function routineCard(s, compact) {
   const k = sessionKcal(s, bodyKg(), cfg('rules'), exById());
   let h = `<div class="routine"><div class="row sp nw"><b class="grow">${esc(s.title)}</b><span class="pill ${s.status === 'done' ? 'ok' : 'warn'}">${s.status === 'done' ? 'terminada' : 'en curso'}</span></div>`;
   h += `<p class="tiny muted" style="margin:2px 0 6px">${esc(s.formatLabel || 'series normales')} · ${s.timeMin || '—'} min${s.watchStart != null ? ' · reloj al empezar ' + fmt(s.watchStart) : ''}</p><ol class="rlist">`;
-  if (s.opener) h += `<li class="${s.opener.done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${s.opener.done ? '✓' : ''}</span><span class="grow"><b>${esc(s.opener.name)}</b><span class="tiny muted" style="display:block">${esc(openerLine(s.opener))}</span></span></li>`;
+  if (s.opener) h += `<li class="${s.opener.done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${s.opener.done ? '✓' : ''}</span><span class="grow"><button class="linkbtn" data-act="openerSheet" data-arg="${esc(s.id)}">${esc(s.opener.name)}</button> <span class="pill warn">primero</span><span class="tiny muted" style="display:block">${esc(openerLine(s.opener))} · toca para ver los ejercicios y el timer</span></span></li>`;
+  else if (s.status === 'active' && s.location !== 'casa') h += `<li><span class="rcheck" aria-hidden="true"></span><span class="grow"><button class="linkbtn" data-act="addOpener">+ Agregar arranque HIIT</button></span></li>`;
   for (const it of s.items || []) {
     const doneN = (it.sets || []).filter(x => x.done || num(x.reps) > 0).length, total = Math.max((it.sets || []).length, (it.planned || {}).sets || 0);
     const done = total && doneN >= total;
@@ -867,6 +876,7 @@ function routineCard(s, compact) {
   if (s.cardio) h += `<li class="${s.cardio.done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${s.cardio.done ? '✓' : ''}</span><span class="grow"><b>Intervalos en ${s.cardio.type === 'elliptical' ? 'elíptica' : 'cinta'}</b><span class="tiny muted" style="display:block">${esc(s.cardio.text || '')}</span></span></li>`;
   if (s.finisher) h += `<li class="${s.finisher.done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${s.finisher.done ? '✓' : ''}</span><span class="grow"><b>Final: ${esc(s.finisher.name)}</b><span class="tiny muted" style="display:block">${esc(s.finisher.desc)}</span></span></li>`;
   h += `</ol>`;
+  if (!compact && s.status === 'active') { const bk = sessionBackups(s.items || [], sessPool(s), 5); if (bk.length) h += `<details class="how"><summary>Backups de hoy (${bk.length})</summary><p class="tiny muted" style="margin:0 0 4px">Para cambiar uno puntual, toca el ejercicio y usa "Cambiarlo por".</p>${bk.map(e => exOption(e, 'addBackup', e.id, 'Agregar')).join('')}</details>`; }
   if (!compact || s.status === 'done') h += `<p class="tiny ink2" style="margin:6px 0 0">${k.watchDelta != null ? `estimado ${fmt(k.estimate)} − reloj ${fmt(k.strengthSeen)} = +${fmt(k.extra)} kcal` : (s.watchStart != null && s.status !== 'done' ? `estimado ${fmt(k.estimate)} kcal hasta ahora (falta la lectura final del reloj)` : `estimado ${fmt(k.estimate)} kcal (sin lecturas del reloj: cuenta 100 %)`)}</p>`;
   if (s.status === 'done') { const nx = (s.items || []).map(it => { const n = nextStrength(it, { unit: itemDisplayUnit(it) }); return n ? `${it.name}: ${n.action === 'block' ? 'bloquear (dolor)' : n.text}` : null; }).filter(Boolean); if (nx.length) h += `<p class="tiny" style="margin:6px 0 0"><b>Próxima vez:</b> ${esc(nx.join(' · '))}</p>`; }
   return h + `</div>`;
@@ -892,7 +902,7 @@ function viewNextSession() {
   const n = nextGymDay(); if (!n) return '';
   const tomorrowFb = (cfg('plan').days[DOW_KEYS[(dowIndex(n.date) + 1) % 7]] || {}).kind === 'football';
   const p = buildSession({ template: n.plan.template, timeMin: 60, energy: 'normal', exercises: exArr(), equipment: eqArr(), sessions: sessionsArr(), rules: cfg('rules'), date: n.date, tomorrowFootball: tomorrowFb, lastRunWalk: lastRunWalk() });
-  return `<section class="card" aria-labelledby="h-next"><h2 id="h-next">Próxima sesión</h2><p class="small ink2" style="margin:0 0 6px">${fmtDateEs(n.date, true)} · ${esc(p.title)} · ~60 min</p><p class="small" style="margin:0">${p.items.map(i => esc(i.name)).join(' · ') || 'Aún no conozco equipo para esta sesión.'}${p.finisher ? ' · final: ' + esc(p.finisher.name) : ''}</p></section>`;
+  return `<section class="card" aria-labelledby="h-next"><h2 id="h-next">Próxima sesión</h2><p class="small ink2" style="margin:0 0 6px">${fmtDateEs(n.date, true)} · ${esc(p.title)} · ~60 min</p><p class="small" style="margin:0">${p.opener ? 'Primero: ' + esc(p.opener.name) + ' (~' + p.opener.minutes + ' min) · ' : ''}${p.items.map(i => esc(i.name)).join(' · ') || 'Aún no conozco equipo para esta sesión.'}${p.finisher ? ' · final: ' + esc(p.finisher.name) : ''}</p></section>`;
 }
 function viewAnchors() {
   const anchors = exArr().filter(e => e.anchor && !e.blocked); if (!anchors.length) return '';
@@ -953,7 +963,7 @@ function viewSession(s) {
     <p class="small ink2" style="margin:0">${s.timeMin} min · ${esc(s.formatLabel || 'series normales')} · energía ${esc(s.energy)} · ~<b class="num">${fmt(k.gross)}</b> kcal (${fmt(k.extra)} extra al reloj)</p>`;
   for (const w of s.warnings || []) h += `<p class="small warn" style="margin:6px 0 0">${esc(w)}</p>`;
   h += `</section>`;
-  if (s.opener) h += viewOpener(s);
+  if (s.opener) h += `<section class="card"><button class="primary full" data-act="openerSheet" data-arg="${esc(s.id)}">${esc(s.opener.name)}: ver ejercicios y timer</button></section>`;
   else if (s.location !== 'casa') h += `<section class="card"><p class="small ink2" style="margin:0 0 6px">Esta sesión no tiene el arranque HIIT.</p><button class="primary full" data-act="addOpener">Agregar arranque HIIT</button></section>`;
   (s.items || []).forEach((it, i) => { h += viewItem(s, it, i); });
   if (s.cardio) h += viewCardio(s);
@@ -1018,18 +1028,25 @@ function viewItem(s, it, i) {
 // ---------- HIIT opener (before the weights) + interval timer ----------
 function openerLine(o) { return `${o.rounds} ${o.rounds > 1 ? 'rondas' : 'ronda'} · ${o.work} s trabajo / ${o.rest} s descanso${o.rounds > 1 ? ` · ${o.roundRest} s entre rondas` : ''} · ~${o.minutes} min`; }
 function viewOpener(s) {
-  const o = s.opener, t = ui.hiit;
+  const o = s.opener, t = ui.hiit && ui.hiit.sid === s.id ? ui.hiit : null;
   let h = `<section class="card" aria-labelledby="h-op"><div class="row sp"><h3 id="h-op" style="margin:0">${esc(o.name)}</h3><span class="pill warn">antes de las pesas</span></div>
   <p class="small ink2" style="margin:4px 0">${esc(openerLine(o))}</p><p class="tiny muted" style="margin:0 0 6px">${esc(o.note || '')}</p>`;
   h += `<div class="hiit-timer" aria-live="polite">${(v => `<div id="hiit-phase" class="small ink2">${esc(v.phase)}</div><div id="hiit-move" class="hiit-move">${esc(v.move)}</div><div id="hiit-left" class="hiit-left num ${v.kind}">${v.left}</div>`)(hiitView(t, o))}</div>`;
-  h += `<div class="row" style="margin:6px 0 10px">${t ? `<button class="grow" data-act="hiitPause">${t.paused ? 'Seguir' : 'Pausa'}</button><button class="ghost" data-act="hiitStop">Parar</button>` : `<button class="primary grow" data-act="hiitStart">Iniciar timer</button>`}</div>`;
+  h += `<div class="row" style="margin:6px 0 10px">${s.status !== 'active' ? '' : t ? `<button class="grow" data-act="hiitPause">${t.pausedAt ? 'Seguir' : 'Pausa'}</button><button class="ghost" data-act="hiitStop">Parar</button>` : `<button class="primary grow" data-act="hiitStart" data-arg="${esc(s.id)}">Iniciar timer</button>`}</div>`;
   h += o.moves.map((m, k) => `<div class="hiit-ex"><div class="small"><b>${k + 1}. ${esc(m.name)}</b> <span class="tiny muted">${esc(m.cue)}</span></div><div class="expics">${(m.photos || []).map(u => `<img src="${esc(u)}" alt="${esc(m.name)}" loading="lazy">`).join('')}</div></div>`).join('');
-  h += `<button class="chk ${o.done ? 'done' : ''}" style="width:auto;padding:0 14px;margin-top:8px" data-act="openerDone" aria-pressed="${!!o.done}">${o.done ? '✓ Hecho' : 'Marcar hecho'}</button></section>`;
+  h += `<button class="chk ${o.done ? 'done' : ''}" style="width:auto;padding:0 14px;margin-top:8px" data-act="openerDone" data-arg="${esc(s.id)}" aria-pressed="${!!o.done}">${o.done ? '✓ Hecho' : 'Marcar hecho'}</button></section>`;
   return h;
 }
-ACTIONS.addOpener = () => writeSess(curSessId(), s => { if (s.opener) return false; s.opener = buildOpener({ eqIds: new Set(availEquipment().map(q => q.id)), energy: s.energy, tomorrowFootball: tomorrowFootball(), sessions: sessionsArr(), heavyLegs: s.template === 'A' }); });
-ACTIONS.openerDone = () => writeSess(curSessId(), s => { if (!s.opener) return false; s.opener.done = !s.opener.done; });
-// Timeline: [work move1, rest, work move2, rest, ..., round rest, ...]; ticks once per second and only touches the timer DOM.
+ACTIONS.addOpener = () => writeSess(curSessId(), s => { if (s.opener) return false; s.opener = buildOpener({ eqIds: new Set(usableEquipment().map(q => q.id)), energy: s.energy, tomorrowFootball: tomorrowFootball(), sessions: sessionsArr(), heavyLegs: !!(TEMPLATES[s.template] || {}).heavyLegs }); });
+ACTIONS.openerSheet = id => { ui.sheet = 'opener:' + id; render(); };
+function swapBlock(s, exId) {
+  if (!s || s.status !== 'active') return '';
+  const i = (s.items || []).findIndex(x => x.exId === exId); if (i < 0) return '';
+  const e = cache.get('exercises/' + exId) || {}, opts = similarExercises({ id: exId, ...e }, sessPool(s), s.items.map(x => x.exId), 5);
+  return `<h3 style="margin:14px 0 4px">¿No te late? Cámbialo por:</h3>${opts.length ? opts.map(o => exOption(o, 'swapTo', i + '.' + o.id, 'Usar')).join('') : '<p class="small muted">No tengo otro parecido con tu equipo.</p>'}`;
+}
+ACTIONS.openerDone = sid => writeSess(sid || curSessId(), s => { if (!s.opener) return false; s.opener.done = !s.opener.done; });
+// Timeline: [work move1, rest, work move2, rest, ..., round rest, ...].
 function hiitSteps(o) {
   const st = [];
   for (let r = 0; r < o.rounds; r++) o.moves.forEach((m, k) => {
@@ -1040,12 +1057,26 @@ function hiitSteps(o) {
   });
   return st;
 }
+// The clock is wall time (start timestamp minus paused time), so it stays right even if iOS throttles timers
+// while the screen is locked or the app is in the background. The tick only repaints and beeps.
 let hiitTick = null, hiitAudio = null, hiitLock = null;
-function hiitBeep(f, ms) { try { hiitAudio = hiitAudio || new (window.AudioContext || window.webkitAudioContext)(); const o = hiitAudio.createOscillator(), g = hiitAudio.createGain(); o.frequency.value = f; o.connect(g); g.connect(hiitAudio.destination); g.gain.value = 0.25; o.start(); o.stop(hiitAudio.currentTime + ms / 1000); } catch (_) {} if (navigator.vibrate) navigator.vibrate(ms); }
+function hiitBeep(f, ms) {
+  try {
+    hiitAudio = hiitAudio || new (window.AudioContext || window.webkitAudioContext)();
+    if (hiitAudio.state === 'suspended') hiitAudio.resume();
+    const o = hiitAudio.createOscillator(), g = hiitAudio.createGain(); o.frequency.value = f; o.connect(g); g.connect(hiitAudio.destination); g.gain.value = 0.25; o.start(); o.stop(hiitAudio.currentTime + ms / 1000);
+  } catch (_) { /* no audio */ }
+  if (navigator.vibrate) navigator.vibrate(ms);
+}
+function hiitState(t) {
+  let el = ((t.pausedAt || Date.now()) - t.startAt) / 1000;
+  for (let i = 0; i < t.steps.length; i++) { if (el < t.steps[i].sec) return { i, left: Math.ceil(t.steps[i].sec - el) }; el -= t.steps[i].sec; }
+  return { i: t.steps.length, left: 0 };
+}
 function hiitView(t, o) {
   if (!t) return { phase: 'Listo para empezar', move: o.moves[0].name, left: o.work, kind: '' };
-  const st = t.steps[t.i];
-  return { phase: (st.kind === 'work' ? '¡Dale!' : 'Descanso') + ` · ronda ${st.round}/${t.rounds}` + (t.paused ? ' · en pausa' : ''), move: st.name, left: t.left, kind: st.kind };
+  const { i, left } = hiitState(t), st = t.steps[Math.min(i, t.steps.length - 1)];
+  return { phase: (st.kind === 'work' ? '¡Dale!' : 'Descanso') + ` · ronda ${st.round}/${t.rounds}` + (t.pausedAt ? ' · en pausa' : ''), move: st.name, left, kind: st.kind };
 }
 function hiitPaint() {
   const t = ui.hiit; if (!t) return; const v = hiitView(t), $ = id => document.getElementById(id);
@@ -1053,26 +1084,34 @@ function hiitPaint() {
   if ($('hiit-move')) $('hiit-move').textContent = v.move;
   if ($('hiit-left')) { $('hiit-left').textContent = v.left; $('hiit-left').className = 'hiit-left num ' + v.kind; }
 }
+function hiitWake() { if (navigator.wakeLock && ui.hiit && !hiitLock) navigator.wakeLock.request('screen').then(l => { hiitLock = l; l.addEventListener('release', () => { hiitLock = null; }); }).catch(() => {}); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ui.hiit) { hiitWake(); hiitPaint(); } });
 function hiitEnd(done) {
+  const sid = ui.hiit && ui.hiit.sid;
   clearInterval(hiitTick); hiitTick = null; ui.hiit = null; if (hiitLock) { hiitLock.release().catch(() => {}); hiitLock = null; }
-  if (done) { hiitBeep(1200, 600); writeSess(curSessId(), s => { if (!s.opener) return false; s.opener.done = true; }); toast('Arranque hecho. Ahora sí, a las pesas.'); }
+  if (done && sid) { hiitBeep(1200, 600); writeSess(sid, s => { if (!s.opener) return false; s.opener.done = true; }); toast('Arranque hecho. Ahora sí, a las pesas.'); }
   render();
 }
-ACTIONS.hiitStart = () => {
-  const s = activeSession(); if (!s || !s.opener) return;
-  const steps = hiitSteps(s.opener);
-  ui.hiit = { steps, i: 0, left: steps[0].sec, rounds: s.opener.rounds, paused: false };
-  if (navigator.wakeLock) navigator.wakeLock.request('screen').then(l => { hiitLock = l; }).catch(() => {});
-  hiitBeep(880, 250); render(); hiitPaint();
+ACTIONS.hiitStart = sid => {
+  const s = sid ? sessionsArr().find(x => x.id === sid) : activeSession(); if (!s || !s.opener) return;
+  clearInterval(hiitTick);
+  ui.hiit = { sid: s.id, steps: hiitSteps(s.opener), rounds: s.opener.rounds, startAt: Date.now(), pausedAt: null, lastI: 0, lastLeft: null };
+  hiitWake(); hiitBeep(880, 250); render(); hiitPaint();
   hiitTick = setInterval(() => {
-    const t = ui.hiit; if (!t || t.paused) return;
-    t.left--;
-    if (t.left > 0 && t.left <= 3) hiitBeep(660, 120);
-    if (t.left <= 0) { t.i++; if (t.i >= t.steps.length) return hiitEnd(true); t.left = t.steps[t.i].sec; hiitBeep(t.steps[t.i].kind === 'work' ? 880 : 440, 300); }
+    const t = ui.hiit; if (!t || t.pausedAt) return;
+    const { i, left } = hiitState(t);
+    if (i >= t.steps.length) return hiitEnd(true);
+    if (i !== t.lastI) hiitBeep(t.steps[i].kind === 'work' ? 880 : 440, 300);
+    else if (left !== t.lastLeft && left > 0 && left <= 3) hiitBeep(660, 120);
+    t.lastI = i; t.lastLeft = left;
     hiitPaint();
-  }, 1000);
+  }, 250);
 };
-ACTIONS.hiitPause = () => { if (!ui.hiit) return; ui.hiit.paused = !ui.hiit.paused; render(); hiitPaint(); };
+ACTIONS.hiitPause = () => {
+  const t = ui.hiit; if (!t) return;
+  if (t.pausedAt) { t.startAt += Date.now() - t.pausedAt; t.pausedAt = null; } else t.pausedAt = Date.now();
+  render(); hiitPaint();
+};
 ACTIONS.hiitStop = () => hiitEnd(false);
 function viewFinisher(s) {
   const f = s.finisher;
@@ -1137,7 +1176,7 @@ function swapItem(s, i, altId) {
 // Exercise by name: from the library, or created on the spot (its "Cómo se hace" is generated after the chat turn).
 async function exerciseByName(x, fallbackPattern) {
   const n = norm(x.name);
-  let ex = exArr().find(e => e.id === x.name || norm(e.name) === n) || exArr().find(e => norm(e.name).includes(n) || n.includes(norm(e.name)));
+  let ex = exArr().find(e => e.id === x.name || norm(e.name) === n) || exArr().find(e => !e.blocked && (norm(e.name).includes(n) || n.includes(norm(e.name))));
   if (ex && ex.blocked) throw new Error(ex.name + ' está bloqueado');
   if (ex) return ex;
   const eqIds = (x.equipment || []).map(q => { const qn = norm(q); const e = eqArr().find(e2 => e2.id === q || norm(e2.name).includes(qn) || qn.includes(norm(e2.name))); return e && e.id; }).filter(Boolean);
@@ -1158,10 +1197,10 @@ ACTIONS.swapPick = i => { ui.swapPick = ui.swapPick === +i ? null : +i; render()
 ACTIONS.swapTo = arg => {
   const k = arg.indexOf('.'), i = +arg.slice(0, k), altId = arg.slice(k + 1), s = activeSession(); if (!s) return; ui.swapPick = null;
   let alt = null;
-  writeSess(s.id, cur => { alt = swapItem(cur, i, altId); return alt ? undefined : false; }).then(() => { if (alt) { toast('Cambiado por ' + alt.name + '.'); if (!cache.get('exercises/' + alt.id)?.howto && aiOn()) generateHowTo([alt.id]); } });
+  writeSess(s.id, cur => { alt = swapItem(cur, i, altId); return alt ? undefined : false; }).then(() => { if (alt) { toast('Cambiado por ' + alt.name + '.'); if (ui.sheet && ui.sheet.startsWith('howto:')) { ui.sheet = 'howto:' + alt.id; render(); } if (!cache.get('exercises/' + alt.id)?.howto && aiOn()) generateHowTo([alt.id]); } });
 };
 function sessPool(s) { return exArr().filter(e => exUsable(e) && (s.location === 'casa' ? e.location === 'casa' : e.location !== 'casa')); }
-function exOption(e, act, arg, btn) { return `<div class="exopt">${exThumb(e)}<div class="grow small"><b>${esc(e.name)}</b><div class="tiny muted">${esc((e.muscles || []).join(', '))}</div></div><button class="sm" data-act="${act}" data-arg="${esc(arg)}">${btn}</button></div>`; }
+function exOption(e, act, arg, btn) { return `<div class="exopt">${exThumb(e)}<div class="grow small"><button class="linkbtn" data-act="howto" data-arg="${esc(e.id)}">${esc(e.name)}</button><div class="tiny muted">${esc((e.muscles || []).join(', '))}</div></div><button class="sm" data-act="${act}" data-arg="${esc(arg)}">${btn}</button></div>`; }
 ACTIONS.blockEx = i => {
   const s = activeSession(); if (!s) return; const it = s.items[+i]; ui.painOffer = null;
   writeDoc('exercises/' + it.exId, cur => cur ? { ...cur, blocked: true, blockedReason: 'dolor', blockedAt: today() } : null);
@@ -1171,7 +1210,7 @@ ACTIONS.removeItem = i => writeSess(curSessId(), s => { s.items.splice(+i, 1); }
 ACTIONS.addBackup = id => ACTIONS.addExToSession(id);
 ACTIONS.addExToSession = pick => {
   const id = typeof pick === 'string' && pick ? pick : val('addEx'), e = cache.get('exercises/' + id); if (!e) return;
-  const s = activeSession(); const last = lastLogFor(id, sessionsArr(), s.date);
+  const s = activeSession(); if (!s) { toast('Primero empieza la sesión de hoy.'); return; } const last = lastLogFor(id, sessionsArr(), s.date);
   const prog = nextStrength(last);
   const list = prog && prog.action !== 'block' ? prog.sets : Array.from({ length: 3 }, () => ({ reps: DEFAULT_REPS[e.pattern] || 10, kg: null, w: null, unit: 'kg' }));
   writeSess(s.id, cur => { cur.items.push({ exId: id, name: e.name, pattern: e.pattern, vigorous: !!e.vigorous, planned: { sets: list.length, reps: list[0].reps, kg: list[0].kg, w: list[0].w, unit: (prog && prog.unit) || 'kg', list }, why: prog ? prog.why : 'Primera vez: elige un peso con el que te sobren 2 reps.', sets: list.map(() => ({ reps: '', w: '', unit: (prog && prog.unit) || 'kg', done: false })), feel: null }); });
@@ -1784,7 +1823,10 @@ const TOOL_SPECS = [
     execute: async (x) => { const k = canonicalActivity(x.activity); if (!k) throw new Error('actividad desconocida'); await updateCfg('rules', r => { r.blockedActivities = (r.blockedActivities || []).filter(b => canonicalActivity(b.name || b) !== k); }); toolNote(`${ACTIVITIES[k].label} de vuelta`); return { ok: true, unblocked: k }; } },
   { name: 'block_food', description: 'Bloquea una comida (nunca la sugeriré).', inputSchema: { type: 'object', properties: { name: S_STR }, required: ['name'] }, execute: async (x) => { const n = String(x.name).trim(); await updateCfg('rules', r => { r.blockedFoods = [...new Set([...(r.blockedFoods || []), n])]; }); toolNote('Bloqueado: ' + n); return { ok: true, blocked: cfg('rules').blockedFoods }; } },
   { name: 'unblock_food', description: 'Desbloquea una comida.', inputSchema: { type: 'object', properties: { name: S_STR }, required: ['name'] }, execute: async (x) => { const n = norm(x.name); await updateCfg('rules', r => { r.blockedFoods = (r.blockedFoods || []).filter(b => norm(b) !== n); }); toolNote('Desbloqueado: ' + x.name); return { ok: true, blocked: cfg('rules').blockedFoods }; } },
-  { name: 'block_exercise', description: 'Bloquea un ejercicio (dolor o no le gusta). Se reemplaza por uno parecido.', inputSchema: { type: 'object', properties: { name: S_STR, reason: S_STR }, required: ['name'] }, execute: async (x) => { const e = findEx(x.name); if (!e) throw new Error('no encuentro ese ejercicio'); await writeDoc('exercises/' + e.id, cur => cur ? { ...cur, blocked: true, blockedReason: x.reason || 'chat', blockedAt: today() } : null); const alt = similarExercise(e, exArr().filter(exUsable)); toolNote('Bloqueado: ' + e.name); return { ok: true, blocked: e.name, substitute: alt ? alt.name : null }; } },
+  { name: 'block_exercise', description: 'Bloquea un ejercicio (dolor o no le gusta). Se reemplaza por uno parecido.', inputSchema: { type: 'object', properties: { name: S_STR, reason: S_STR }, required: ['name'] }, execute: async (x) => { const e = findEx(x.name); if (!e) throw new Error('no encuentro ese ejercicio'); await writeDoc('exercises/' + e.id, cur => cur ? { ...cur, blocked: true, blockedReason: x.reason || 'chat', blockedAt: today() } : null); const act = activeSession(); let alt = null;
+    if (act && (act.items || []).some(it => it.exId === e.id)) { await writeSess(act.id, cur => { const i = cur.items.findIndex(it => it.exId === e.id); if (i < 0) return false; alt = swapItem(cur, i); if (!alt) cur.items.splice(i, 1); }); }
+    else alt = similarExercise(e, exArr().filter(q => exUsable(q) && q.location !== 'casa'));
+    toolNote('Bloqueado: ' + e.name); return { ok: true, blocked: e.name, substitute: alt ? alt.name : null }; } },
   { name: 'unblock_exercise', description: 'Desbloquea un ejercicio.', inputSchema: { type: 'object', properties: { name: S_STR }, required: ['name'] }, execute: async (x) => { const e = findEx(x.name); if (!e) throw new Error('no encuentro ese ejercicio'); await writeDoc('exercises/' + e.id, cur => cur ? { ...cur, blocked: false, blockedReason: null } : null); toolNote('Desbloqueado: ' + e.name); return { ok: true }; } },
   { name: 'update_rule', description: 'Cambia una regla. key: coffee_kcal_12, coffee_kcal_14, coffee_provisional, deficit_target, deficit_min, deficit_max, protein_min, protein_max, strength_extra_factor (0-1), pushup_kcal, bmr_fallback, goal_kg, movement_target, activity_factor (ej. 1.2), eat_back_factor (0-1), target_floor (kcal), season (winter|summer), add_cooking_rule, add_meal_guidance.', inputSchema: { type: 'object', properties: { key: S_STR, value: {} }, required: ['key', 'value'] },
     execute: async (x) => {
@@ -2067,10 +2109,14 @@ document.addEventListener('keydown', ev => { if (ev.target && ev.target.id === '
 
 // ---------- Settings sheet ----------
 function viewSheet(kind) {
+  if (kind && kind.startsWith('opener:')) {
+    const sx = cache.get('sessions/' + kind.slice(7)); if (!sx || !sx.opener) return '';
+    return `<div class="sheet" data-act="sheetBg"><div class="panel" role="dialog" aria-modal="true" aria-labelledby="h-op"><div class="row sp nw"><span class="grow"></span><button class="iconbtn" data-act="closeSheet" aria-label="Cerrar">×</button></div>${viewOpener({ id: kind.slice(7), ...sx })}</div></div>`;
+  }
   if (kind && kind.startsWith('howto:')) {
     const id = kind.slice(6), e = cache.get('exercises/' + id); const ex = e ? { id, ...e } : { id, name: id, pattern: 'other' };
     const s = todaySession(), it = s && (s.items || []).find(x => x.exId === id) || { pattern: ex.pattern };
-    return `<div class="sheet" data-act="sheetBg"><div class="panel" role="dialog" aria-modal="true" aria-labelledby="h-how"><div class="row sp nw"><h2 id="h-how" class="grow" style="margin:0">${esc(ex.name)}</h2><button class="iconbtn" data-act="closeSheet" aria-label="Cerrar">×</button></div>${it.planned ? `<p class="small ink2">Plan: ${esc(planText(it))}</p>` : ''}${howToBlock(ex, it, s, true)}</div></div>`;
+    return `<div class="sheet" data-act="sheetBg"><div class="panel" role="dialog" aria-modal="true" aria-labelledby="h-how"><div class="row sp nw"><h2 id="h-how" class="grow" style="margin:0">${esc(ex.name)}</h2><button class="iconbtn" data-act="closeSheet" aria-label="Cerrar">×</button></div>${it.planned ? `<p class="small ink2">Plan: ${esc(planText(it))}</p>` : ''}${howToBlock(ex, it, s, true)}${swapBlock(s, id)}</div></div>`;
   }
   return viewSettings();
 }

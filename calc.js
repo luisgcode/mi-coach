@@ -349,7 +349,7 @@ function buildOpener({ eqIds, energy, tomorrowFootball, sessions, heavyLegs }) {
   const moves = o.moves.map(k => HIIT_MOVES[k]).filter(m => !m.needs || eqIds.has(m.needs)).map(m => ({ name: m.name, cue: m.cue, photos: m.photos }));
   const rounds = energy === 'cansado' || tomorrowFootball ? 1 : 2, work = 30, rest = 15, roundRest = 60;
   const minutes = Math.round((moves.length * (work + rest) * rounds + roundRest * (rounds - 1)) / 60);
-  const note = heavyLegs ? 'Día de piernas: ve al 7 de 10, que el hip thrust es lo importante hoy.' : 'Al 8 de 10: que te falte el aire, pero sin perder la técnica.';
+  const note = heavyLegs ? 'Día de piernas: ve al 7 de 10, que lo importante hoy son las pesas de glúteo.' : 'Al 8 de 10: que te falte el aire, pero sin perder la técnica.';
   return { id: o.id, name: o.name, moves, rounds, work, rest, roundRest, minutes, met: 8, note, watchCounted: true, done: false };
 }
 
@@ -768,8 +768,9 @@ function computeNudges(S) {
   // Gym planned today
   if (planToday && planToday.kind === 'gym') {
     const done = S.sessions.some(s => s.date === today && s.status === 'done');
+    const started = S.sessions.some(s => s.date === today && s.status === 'active');
     const freeFrom = (t.dow === 1 || t.dow === 5) ? 16 * 60 : 18 * 60;
-    if (!done && t.mins >= freeFrom - 30 && t.hour < 22 && !moved) { moved = true; add('gym', 'hacer', `Hoy toca ${planToday.title || 'gym'}. Cuando llegues, dile al chat cuánto tiempo tienes y lo que marca el reloj.`, 'gym'); }
+    if (!done && !started && t.mins >= freeFrom - 30 && t.hour < 22 && !moved) { moved = true; add('gym', 'hacer', `Hoy toca ${planToday.title || 'gym'}. Cuando llegues, dile al chat cuánto tiempo tienes y lo que marca el reloj.`, 'gym'); }
     if (!done && t.hour >= 22) add('gym-perdido', 'pendiente', 'Hoy tocaba gym y no quedó registrado. Lo reacomodo en la semana si me dices.', 'chat');
   }
   // Football Wednesday
