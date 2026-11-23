@@ -199,3 +199,15 @@ body.kb .app{padding-bottom:12px}
 .hiit-left.rest{color:var(--muted)}
 .hiit-ex{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
 .hiit-ex .expics img{width:100%;height:auto;border-radius:10px;display:block}
+/* Routine: tappable done box (44px touch target) and the fixed "Rutina en curso" bar above the tabs */
+.rcheck.tap{width:44px;height:44px;margin:-8px 0 -8px -8px;padding:0;background:transparent;border-width:2px;border-radius:10px;font-size:14px;cursor:pointer}
+.rlist li.done .rcheck.tap{background:var(--good);border-color:var(--good);color:#fff}
+#routineBar{position:fixed;left:0;right:0;bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px));z-index:19;display:flex;justify-content:center;pointer-events:none}
+.rbar{pointer-events:auto;width:calc(100% - 16px);max-width:544px;margin:0 8px 6px;min-height:48px;display:flex;align-items:center;gap:8px;padding:0 14px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);font-size:15px;text-align:left;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.rbar-go{font-weight:700;white-space:nowrap}
+body.has-rbar .app{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 62px)}
+body.kb #routineBar{display:none}
+body.has-rbar .toast{bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 66px)}
+body.has-rbar .composer{bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 54px)}
+body.has-rbar.kb .composer{bottom:0}
+body.has-rbar .app:has(.composer){padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 14px)}

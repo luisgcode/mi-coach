@@ -33,7 +33,11 @@ function num(x) {
   return Number.isFinite(n) ? n : null;
 }
 const LB = 0.45359237;
-function toKg(w, unit) { const v = num(w); if (v == null) return null; return unit === 'lb' ? Math.round(v * LB * 100) / 100 : v; }
+// unit 'n' = the number printed on the machine (plate/pin) when he doesn't know if it's kg or lb: no conversion, compared as-is.
+function toKg(w, unit) { const v = num(w); if (v == null || unit === 'n') return null; return unit === 'lb' ? Math.round(v * LB * 100) / 100 : v; }
+function unitLabel(u) { return u === 'n' ? 'nº máquina' : u || 'kg'; }
+// Comparable load: kg for kg/lb, the raw machine number for 'n'.
+function loadOf(s) { return s && s.unit === 'n' ? (num(s.w) || 0) : kgOf(s); }
 function kgOf(s) { if (!s) return 0; if (s.w != null && s.w !== '') return toKg(s.w, s.unit) || 0; return num(s.kg) || 0; }
 function fromKg(kg, unit) { return unit === 'lb' ? kg / LB : kg; }
 function roundStep(x, step = 2.5) { return Math.round(x / step) * step; }
@@ -231,7 +235,7 @@ function describeSets(sets) {
     const w = s.w != null ? num(s.w) : num(s.kg), u = s.unit || 'kg';
     if (g && g.reps === s.reps && g.w === w && g.u === u) g.n++; else groups.push({ n: 1, reps: s.reps, w, u });
   }
-  return groups.map(g => `${g.n}×${g.reps}${g.w ? ' @ ' + fmtKg(g.w) + ' ' + g.u : ''}`).join(' + ');
+  return groups.map(g => `${g.n}×${g.reps}${g.w ? (g.u === 'n' ? ' @ nº ' + fmtKg(g.w) : ' @ ' + fmtKg(g.w) + ' ' + g.u) : ''}`).join(' + ');
 }
 function fmtKg(k) { return Number.isInteger(k) ? String(k) : String(r1(k)).replace('.', ','); }
 // last = {planned:{sets,reps,kg}, sets:[{reps,kg}], feel:'facil'|'bien'|'dificil'|'dolor'}
@@ -241,8 +245,8 @@ function nextStrength(last, opts = {}) {
   if (!raw.length) return null;
   // Work in the unit he used last (lb or kg); values below are in that unit.
   const unit = opts.unit || raw[raw.length - 1].unit || 'kg';
-  const step = unit === 'lb' ? (opts.stepLb || 5) : (opts.step || 2.5);
-  const sets = raw.map(s => ({ reps: num(s.reps), kg: r1(fromKg(kgOf(s), unit) * 10) / 10 })).map(s => ({ ...s, kg: unit === 'lb' ? Math.round(s.kg) : s.kg }));
+  const step = unit === 'n' ? 1 : unit === 'lb' ? (opts.stepLb || 5) : (opts.step || 2.5);
+  const sets = raw.map(s => ({ reps: num(s.reps), kg: unit === 'n' ? (s.unit === 'n' ? num(s.w) || 0 : 0) : r1(fromKg(kgOf(s), unit) * 10) / 10 })).map(s => ({ ...s, kg: unit === 'lb' ? Math.round(s.kg) : s.kg }));
   const plannedSets = num(last.planned && last.planned.sets) || sets.length;
   const target = num(last.planned && last.planned.reps) || Math.max(...sets.map(s => s.reps));
   const n = Math.max(sets.length, plannedSets);
@@ -493,8 +497,11 @@ function buildSession(args) {
     let planSets;
     if (prog && prog.action !== 'block') planSets = prog.sets.slice(0, setsPer).concat(prog.sets.length < setsPer ? Array.from({ length: setsPer - prog.sets.length }, () => prog.sets[prog.sets.length - 1]) : []);
     else planSets = Array.from({ length: setsPer }, () => ({ reps: DEFAULT_REPS[e.pattern] || DEFAULT_REP, kg: null, w: null, unit: 'kg' }));
-    if (tired && prog && prog.action !== 'down') planSets = planSets.map(s => { if (!s.w) return s; const st = s.unit === 'lb' ? 5 : step; const w = lighter(s.w, st); return { ...s, w, kg: toKg(w, s.unit) }; });
-    const unit = (prog && prog.unit) || (last && (last.sets || []).slice(-1)[0]?.unit) || 'kg';
+    if (tired && prog && prog.action !== 'down') planSets = planSets.map(s => { if (!s.w) return s; const st = s.unit === 'n' ? 1 : s.unit === 'lb' ? 5 : step; const w = lighter(s.w, st); return { ...s, w, kg: toKg(w, s.unit) }; });
+    // Weight-stack machines often show only a number: default to 'n' (machine number) there; plate-loaded and free weights stay kg.
+    const stack = (e.equipmentIds || []).some(id => { const q = avail.find(x => x.id === id); return q && q.kind === 'machine' && !/de discos/i.test(q.name || ''); });
+    const unit = (prog && prog.unit) || (last && (last.sets || []).slice(-1)[0]?.unit) || (stack ? 'n' : 'kg');
+    if (!prog) planSets = planSets.map(p => ({ ...p, unit }));
     const isNew = !last && timesDone(e.id, args.sessions || []) === 0;
     let group = null;
     if (format === 'superserie' && !anchorIds.has(e.id)) { const k = nonAnchor.indexOf(e); group = 'Superserie ' + (Math.floor(k / 2) + 1); }
@@ -898,7 +905,7 @@ function safeId(s) { return String(s).replace(/[^A-Za-z0-9_\-.~:@+]/g, '-').slic
 function prsFrom(sessions) {
   const best = {};
   for (const s of sessions) for (const it of s.items || []) for (const st of it.sets || []) {
-    const reps = num(st.reps), kg = kgOf(st); if (!reps) continue;
+    const reps = num(st.reps), kg = loadOf(st); if (!reps) continue;
     const e1 = kg * (1 + reps / 30);
     const cur = best[it.exId];
     if (!cur || kg > cur.kg || (kg === cur.kg && reps > cur.reps)) best[it.exId] = { exId: it.exId, name: it.name, kg, reps, w: st.w != null && st.w !== '' ? num(st.w) : kg, unit: st.unit || 'kg', date: s.date, e1rm: r1(e1) };
@@ -974,4 +981,4 @@ function chatTurns(messages, max = 10) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { buildOpener, OPENERS, HIIT_MOVES, similarExercise, similarExercises, sessionBackups, metricStatus, lighter, weekendRebound, pantryKey, applyPantry, chatMsgId, chatMsgPath, chatTurns, TEMPLATES, canonicalActivity, blockedEquipmentIds, goalPaused, ACTIVITIES, pickFlexActivity, activeBlockedActivities, goalProgress, nextGoalProposal, streaks, movementOptions, pickMovement, FINISHERS, weekIndex, toKg, kgOf, tzNow, addDays, daysBetween, weekStart, dowIndex, strengthKcal, activityKcal, footballStats, sessionKcal, dayBalance, nextStrength, nextRunWalk, describeSets, buildSession, weightSeries, rolling7, learnMealTimes, weekStats, computeNudges, prsFrom, goalsFrom, DEFAULT_RULES, mealSlot };
+if (typeof module !== 'undefined') module.exports = { unitLabel, loadOf, buildOpener, OPENERS, HIIT_MOVES, similarExercise, similarExercises, sessionBackups, metricStatus, lighter, weekendRebound, pantryKey, applyPantry, chatMsgId, chatMsgPath, chatTurns, TEMPLATES, canonicalActivity, blockedEquipmentIds, goalPaused, ACTIVITIES, pickFlexActivity, activeBlockedActivities, goalProgress, nextGoalProposal, streaks, movementOptions, pickMovement, FINISHERS, weekIndex, toKg, kgOf, tzNow, addDays, daysBetween, weekStart, dowIndex, strengthKcal, activityKcal, footballStats, sessionKcal, dayBalance, nextStrength, nextRunWalk, describeSets, buildSession, weightSeries, rolling7, learnMealTimes, weekStats, computeNudges, prsFrom, goalsFrom, DEFAULT_RULES, mealSlot };

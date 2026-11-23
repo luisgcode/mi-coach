@@ -316,16 +316,26 @@ function onWriteError(e) {
 
 // ---------- Render scheduling (never clobber a focused input) ----------
 let renderPending = false, rafId = 0;
+// A finger is on a button: typing in a field and then tapping a button blurs the field, which saves and re-renders.
+// Re-rendering between touch-down and the click would swap the button out from under the finger and lose the tap.
+// So while pressing, renders wait until the click has been handled.
+let pressing = false;
+document.addEventListener('pointerdown', ev => { pressing = !!(ev.target.closest && ev.target.closest('button, [data-act], a, summary, label')); }, true);
+const pressDone = () => { if (!pressing) return; pressing = false; setTimeout(() => { if (renderPending) { renderPending = false; render(); } }, 0); };
+document.addEventListener('click', () => setTimeout(pressDone, 0));
+document.addEventListener('pointercancel', pressDone);
+document.addEventListener('pointerup', () => setTimeout(pressDone, 350)); // fallback if no click follows
 function schedule() {
   if (rafId) return;
   rafId = requestAnimationFrame(() => {
     rafId = 0;
+    if (pressing) { renderPending = true; return; }
     const ae = document.activeElement;
     if (ae && ae.closest && ae.closest('#view, #sheetHost') && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && ae.type !== 'checkbox' && ae.type !== 'file') { renderPending = true; return; }
     render();
   });
 }
-document.addEventListener('focusout', () => { if (renderPending) setTimeout(() => { if (!renderPending) return; const ae = document.activeElement; if (ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && ae.closest('#view, #sheetHost')) return; renderPending = false; render(); }, 30); });
+document.addEventListener('focusout', () => { if (renderPending) setTimeout(() => { if (!renderPending || pressing) return; const ae = document.activeElement; if (ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && ae.closest('#view, #sheetHost')) return; renderPending = false; render(); }, 30); });
 
 // ---------- Toast ----------
 let toastTimer = 0, toastUndo = null;
@@ -479,6 +489,27 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('load', () => { chatStick = true; chatToBottom(); });
 document.addEventListener('load', e => { if (e.target && e.target.tagName === 'IMG' && e.target.closest('#msgs')) chatToBottom(); }, true);
 ACTIONS.openSheet = k => { ui.sheet = k; render(); };
+ACTIONS.quickDone = i => writeSess(curSessId(), s => {
+  const it = s.items[+i]; if (!it) return false;
+  const all = itemDone(it), list = (it.planned && it.planned.list) || [];
+  it.sets.forEach((st, j) => {
+    if (all) { st.done = false; return; }
+    const pl = list[j] || list[list.length - 1] || {};
+    if (st.reps === '' || st.reps == null) st.reps = pl.reps || it.planned.reps || '';
+    if ((st.w === '' || st.w == null) && pl.w) { st.w = pl.w; st.unit = pl.unit || itemDisplayUnit(it); st.kg = toKg(st.w, st.unit); }
+    st.done = true;
+  });
+  if (all) it.sets.forEach(st => { st.reps = ''; }); // undo: the weights stay as a hint for next time
+});
+ACTIONS.openRoutine = () => { ui.sheet = 'routine'; render(); };
+// Fixed bar above the tabs while a session is running: always one tap away from the live list (also from the chat).
+function routineBar() {
+  const s = activeSession(); if (!s || ui.sheet) return '';
+  const p = routineProgress(s);
+  return `<button class="rbar" data-act="openRoutine"><span class="grow"><b>Rutina en curso</b> · ${p.done}/${p.total} hechos</span><span class="rbar-go">Ver lista ›</span></button>`;
+}
+function itemDone(it) { const total = Math.max((it.sets || []).length, (it.planned || {}).sets || 0); return total > 0 && (it.sets || []).filter(x => x.done || num(x.reps) > 0).length >= total; }
+function routineProgress(s) { const parts = (s.items || []).map(itemDone).concat(s.opener ? [!!s.opener.done] : [], s.cardio ? [!!s.cardio.done] : [], s.finisher ? [!!s.finisher.done] : []); return { done: parts.filter(Boolean).length, total: parts.length }; }
 ACTIONS.closeSheet = () => { ui.sheet = null; render(); };
 ACTIONS.ask = (k) => { ui.confirm = k; render(); };
 ACTIONS.cancelAsk = () => { ui.confirm = null; render(); };
@@ -506,6 +537,7 @@ function render() {
     v.innerHTML = ui.tab === 'gym' ? viewGym() : ui.tab === 'progreso' ? viewProgreso() : ui.tab === 'chat' ? viewChat() : viewHoy();
   }
   // Keep the sheet's scroll position when it re-renders (realtime refetch, minute tick, timer state).
+  $('#routineBar').innerHTML = routineBar(); document.body.classList.toggle('has-rbar', !!$('#routineBar').innerHTML);
   const host = $('#sheetHost'), oldPanel = host.querySelector('.panel'), keep = oldPanel && host.dataset.kind === ui.sheet ? oldPanel.scrollTop : 0;
   host.innerHTML = ui.sheet ? viewSheet(ui.sheet) : '';
   host.dataset.kind = ui.sheet || '';
@@ -866,12 +898,12 @@ function routineCard(s, compact) {
   const k = sessionKcal(s, bodyKg(), cfg('rules'), exById());
   let h = `<div class="routine"><div class="row sp nw"><b class="grow">${esc(s.title)}</b><span class="pill ${s.status === 'done' ? 'ok' : 'warn'}">${s.status === 'done' ? 'terminada' : 'en curso'}</span></div>`;
   h += `<p class="tiny muted" style="margin:2px 0 6px">${esc(s.formatLabel || 'series normales')} · ${s.timeMin || '—'} min${s.watchStart != null ? ' · reloj al empezar ' + fmt(s.watchStart) : ''}</p><ol class="rlist">`;
-  if (s.opener) h += `<li class="${s.opener.done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${s.opener.done ? '✓' : ''}</span><span class="grow"><button class="linkbtn" data-act="openerSheet" data-arg="${esc(s.id)}">${esc(s.opener.name)}</button> <span class="pill warn">primero</span><span class="tiny muted" style="display:block">${esc(openerLine(s.opener))} · toca para ver los ejercicios y el timer</span></span></li>`;
+  if (s.opener) h += `<li class="${s.opener.done ? 'done' : ''}">${s.status === 'active' ? `<button class="rcheck tap" data-act="openerDone" data-arg="${esc(s.id)}" aria-pressed="${!!s.opener.done}" aria-label="Marcar hecho: arranque HIIT">${s.opener.done ? '✓' : ''}</button>` : `<span class="rcheck" aria-hidden="true">${s.opener.done ? '✓' : ''}</span>`}<span class="grow"><button class="linkbtn" data-act="openerSheet" data-arg="${esc(s.id)}">${esc(s.opener.name)}</button> <span class="pill warn">primero</span><span class="tiny muted" style="display:block">${esc(openerLine(s.opener))} · toca para ver los ejercicios y el timer</span></span></li>`;
   else if (s.status === 'active' && s.location !== 'casa') h += `<li><span class="rcheck" aria-hidden="true"></span><span class="grow"><button class="linkbtn" data-act="addOpener">+ Agregar arranque HIIT</button></span></li>`;
   for (const it of s.items || []) {
     const doneN = (it.sets || []).filter(x => x.done || num(x.reps) > 0).length, total = Math.max((it.sets || []).length, (it.planned || {}).sets || 0);
     const done = total && doneN >= total;
-    h += `<li class="${done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${done ? '✓' : doneN ? doneN + '/' + total : ''}</span><span class="grow"><button class="linkbtn" data-act="howto" data-arg="${esc(it.exId)}">${esc(it.name)}</button>${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.group ? ` <span class="tiny ink2">${esc(it.group)}</span>` : ''}<span class="tiny muted" style="display:block">Plan: ${esc(planText(it))}${setsText(it) ? ' · hecho: ' + esc(setsText(it)) : ''}${it.feel ? ' · ' + esc(it.feel) : ''}</span></span></li>`;
+    h += `<li class="${done ? 'done' : ''}">${s.status === 'active' ? `<button class="rcheck tap" data-act="quickDone" data-arg="${(s.items || []).indexOf(it)}" aria-pressed="${!!done}" aria-label="${done ? 'Desmarcar' : 'Marcar hecho'}: ${esc(it.name)}">${done ? '✓' : doneN ? doneN + '/' + total : ''}</button>` : `<span class="rcheck" aria-hidden="true">${done ? '✓' : doneN ? doneN + '/' + total : ''}</span>`}<span class="grow"><button class="linkbtn" data-act="howto" data-arg="${esc(it.exId)}">${esc(it.name)}</button>${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.group ? ` <span class="tiny ink2">${esc(it.group)}</span>` : ''}<span class="tiny muted" style="display:block">Plan: ${esc(planText(it))}${setsText(it) ? ' · hecho: ' + esc(setsText(it)) : ''}${it.feel ? ' · ' + esc(it.feel) : ''}</span></span></li>`;
   }
   if (s.cardio) h += `<li class="${s.cardio.done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${s.cardio.done ? '✓' : ''}</span><span class="grow"><b>Intervalos en ${s.cardio.type === 'elliptical' ? 'elíptica' : 'cinta'}</b><span class="tiny muted" style="display:block">${esc(s.cardio.text || '')}</span></span></li>`;
   if (s.finisher) h += `<li class="${s.finisher.done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${s.finisher.done ? '✓' : ''}</span><span class="grow"><b>Final: ${esc(s.finisher.name)}</b><span class="tiny muted" style="display:block">${esc(s.finisher.desc)}</span></span></li>`;
@@ -956,6 +988,7 @@ ACTIONS.eqViaChat = () => { ui.chat.draft = 'Quiero agregar equipo de mi gym: ';
 ACTIONS.startSession = () => startSessionFrom({});
 ACTIONS.surprise = () => { const p = startSessionFrom({ surprise: Date.now() % 100000 + 1 }); if (!p.items.length) toast('No tengo equipo suficiente para una sorpresa hoy.'); else toast('Sesión sorpresa lista.'); };
 
+function parseUnit(u, fallback) { const n = norm(u); return /^(lb|lbs|libra)/.test(n) ? 'lb' : /^(kg|kilo)/.test(n) ? 'kg' : /^(n|no|num|nivel|placa|pin|maq)/.test(n) ? 'n' : (fallback || 'kg'); }
 function itemDisplayUnit(it) { return it.unit || (it.planned && it.planned.unit) || ((it.sets || []).find(s => s.unit) || {}).unit || 'kg'; }
 function viewSession(s) {
   const kg = bodyKg(), k = sessionKcal(s, kg, cfg('rules'), exById());
@@ -994,19 +1027,19 @@ function howToBlock(ex, it, s, forceOpen) {
   h += `<p style="margin:8px 0 0"><a class="btn" href="https://www.youtube.com/results?search_query=${encodeURIComponent(ex.name + ' técnica')}" target="_blank" rel="noopener noreferrer">Ver video ↗</a></p></details>`;
   return h;
 }
-function viewItem(s, it, i) {
+function viewItem(s, it, i, inSheet) {
   const ex = cache.get('exercises/' + it.exId) ? { id: it.exId, ...cache.get('exercises/' + it.exId) } : { id: it.exId, name: it.name, pattern: it.pattern };
-  const unit = itemDisplayUnit(it), list = (it.planned && it.planned.list) || [];
+  const P = inSheet ? 'sh-' : '', unit = itemDisplayUnit(it), list = (it.planned && it.planned.list) || [];
   const planTxt = list.length && (list[0].w || list[0].kg) ? describeSets(list) : `${it.planned.sets}×${it.planned.reps}`;
-  let h = `<section class="card" aria-labelledby="h-it${i}"><div class="exhead">${exThumb(cache.get('exercises/' + it.exId))}<div class="grow"><h3 id="h-it${i}">${esc(it.name)}${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.isNew ? ' <span class="pill warn">nuevo</span>' : ''}</h3>${it.group ? `<div class="tiny ink2">${esc(it.group)}</div>` : ''}<div class="small"><b>Plan:</b> ${esc(planTxt)}</div><div class="tiny muted">${esc(it.why || '')}</div></div></div>`;
-  h += howToBlock(ex, it, s);
-  h += `<div class="row sp" style="margin-top:10px"><span class="small ink2">Series</span><span class="row"><span class="tiny muted">Unidad</span><button class="chip" style="min-height:36px" data-act="setUnit" data-arg="${i}.kg" aria-pressed="${unit === 'kg'}">kg</button><button class="chip" style="min-height:36px" data-act="setUnit" data-arg="${i}.lb" aria-pressed="${unit === 'lb'}">lb</button></span></div>`;
+  let h = inSheet ? `<section class="card" aria-label="${esc(it.name)}"><div class="exhead"><div class="grow">${it.anchor ? '<span class="pill ok">ancla</span> ' : ''}${it.isNew ? '<span class="pill warn">nuevo</span>' : ''}<div class="small"><b>Plan:</b> ${esc(planTxt)}</div><div class="tiny muted">${esc(it.why || '')}</div></div></div>` : `<section class="card" aria-labelledby="h-it${i}"><div class="exhead">${exThumb(cache.get('exercises/' + it.exId))}<div class="grow"><h3 id="h-it${i}">${esc(it.name)}${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.isNew ? ' <span class="pill warn">nuevo</span>' : ''}</h3>${it.group ? `<div class="tiny ink2">${esc(it.group)}</div>` : ''}<div class="small"><b>Plan:</b> ${esc(planTxt)}</div><div class="tiny muted">${esc(it.why || '')}</div></div></div>`;
+  if (!inSheet) h += howToBlock(ex, it, s);
+  h += `<div class="row sp" style="margin-top:10px"><span class="small ink2">Series</span><span class="row"><span class="tiny muted">Peso en</span>${[['kg', 'kg'], ['lb', 'lb'], ['n', 'nº máquina']].map(([u, l]) => `<button class="chip" style="min-height:36px" data-act="setUnit" data-arg="${i}.${u}" aria-pressed="${unit === u}">${l}</button>`).join('')}</span></div>`;
   (it.sets || []).forEach((st, j) => {
     const pl = list[j] || list[list.length - 1] || {};
     const done = !!st.done;
     h += `<div class="setrow"><button class="chk ${done ? 'done' : ''}" data-act="toggleSet" data-arg="${i}.${j}" aria-pressed="${done}" aria-label="Serie ${j + 1} ${done ? 'hecha' : 'pendiente'}">${done ? '✓' : j + 1}</button>
-      <div><label class="sr" for="r-${i}-${j}">Reps serie ${j + 1}</label><input id="r-${i}-${j}" type="number" inputmode="numeric" placeholder="${esc(pl.reps ?? '')} reps" value="${esc(st.reps ?? '')}" data-change="setField" data-arg="${i}.${j}.reps"></div>
-      <div><label class="sr" for="w-${i}-${j}">Peso serie ${j + 1} en ${unit}</label><input id="w-${i}-${j}" type="number" inputmode="decimal" step="any" placeholder="${pl.w ? esc(pl.w) + ' ' + esc(pl.unit || unit) : unit}" value="${esc(st.w ?? (st.kg ?? ''))}" data-change="setField" data-arg="${i}.${j}.w"></div></div>`;
+      <div><label class="sr" for="${P}r-${i}-${j}">Reps serie ${j + 1}</label><input id="${P}r-${i}-${j}" type="number" inputmode="numeric" placeholder="${esc(pl.reps ?? '')} reps" value="${esc(st.reps ?? '')}" data-change="setField" data-arg="${i}.${j}.reps"></div>
+      <div><label class="sr" for="${P}w-${i}-${j}">Peso serie ${j + 1} en ${unit}</label><input id="${P}w-${i}-${j}" type="number" inputmode="decimal" step="any" placeholder="${pl.w ? (unitLabel(pl.unit || unit) === 'nº máquina' ? 'nº ' + esc(pl.w) : esc(pl.w) + ' ' + esc(pl.unit || unit)) : unit === 'n' ? 'nº' : unit}" value="${esc(st.w ?? (st.kg ?? ''))}" data-change="setField" data-arg="${i}.${j}.w"></div></div>`;
   });
   const doneN = (it.sets || []).filter(x => x.done).length;
   h += `<div class="row sp" style="margin-top:6px"><span class="tiny muted">${doneN}/${(it.sets || []).length} hechas</span><button class="sm ghost" data-act="addSet" data-arg="${i}">+ serie</button></div>`;
@@ -1015,9 +1048,10 @@ function viewItem(s, it, i) {
     const alt = similarExercise(ex, exArr().filter(e => exUsable(e) && (s.location === 'casa' ? e.location === 'casa' : e.location !== 'casa') &&!(s.items || []).some(x => x.exId === e.id)));
     h += `<div class="card confirm" style="margin:8px 0 0"><p class="small" style="margin-top:0">Si te lastima, no lo hagas. ¿Lo bloqueo para próximas sesiones${alt ? ` y lo cambio por <b>${esc(alt.name)}</b>` : ''}?</p><div class="row"><button class="primary sm" data-act="blockEx" data-arg="${i}">Bloquear${alt ? ' y cambiar' : ''}</button>${alt ? `<button class="sm" data-act="swapEx" data-arg="${i}">Solo cambiar hoy</button>` : ''}<button class="sm ghost" data-act="closePain">No</button></div></div>`;
   }
-  if (aiOn()) h += `<div class="row nw" style="margin-top:8px"><label class="sr" for="ft-${i}">Escribe lo que hiciste</label><input id="ft-${i}" class="grow" placeholder="Ej: hice 3 con 5 kg y la última con 12"><button class="sm" data-act="parseSets" data-arg="${i}" ${ui.parseBusy === i ? 'disabled' : ''}>${ui.parseBusy === i ? '…' : 'Anotar'}</button></div>`;
+  if (aiOn()) h += `<div class="row nw" style="margin-top:8px"><label class="sr" for="${P}ft-${i}">Escribe lo que hiciste</label><input id="${P}ft-${i}" class="grow" placeholder="Ej: hice 3 con 5 kg y la última con 12"><button class="sm" data-act="parseSets" data-arg="${i}" ${ui.parseBusy === i ? 'disabled' : ''}>${ui.parseBusy === i ? '…' : 'Anotar'}</button></div>`;
   const nx = nextStrength({ ...it, planned: it.planned }, { unit });
-  if (nx && (it.sets || []).some(x => num(x.reps) > 0)) h += `<p class="small" style="margin:8px 0 0"><b>Próxima vez:</b> ${nx.action === 'block' ? 'bloquear y cambiar' : esc(nx.text)} <span class="tiny muted">${esc(nx.why)}</span></p>`;
+  if (nx && itemDone(it)) h += `<p class="small" style="margin:8px 0 0"><b>Próxima vez:</b> ${nx.action === 'block' ? 'bloquear y cambiar' : esc(nx.text)} <span class="tiny muted">${esc(nx.why)}</span></p>`;
+  if (inSheet) h += howToBlock(ex, it, s);
   h += `<div class="row" style="margin-top:8px"><button class="sm ghost" data-act="swapPick" data-arg="${i}" aria-expanded="${ui.swapPick === i}">Cambiar ejercicio</button><button class="sm ghost" data-act="removeItem" data-arg="${i}">Quitar</button></div>`;
   if (ui.swapPick === i) {
     const opts = similarExercises(ex, sessPool(s), (s.items || []).map(x => x.exId), 5);
@@ -1152,6 +1186,9 @@ ACTIONS.toggleSet = arg => {
     if (!st.done) {
       if (st.reps === '' || st.reps == null) st.reps = pl.reps || it.planned.reps || '';
       if ((st.w === '' || st.w == null) && pl.w) { st.w = pl.w; st.unit = pl.unit || itemDisplayUnit(it); st.kg = toKg(st.w, st.unit); }
+      // No planned weight: repeat the one he used on the previous set.
+      const prev = it.sets.slice(0, j).reverse().find(x => x.w !== '' && x.w != null);
+      if ((st.w === '' || st.w == null) && prev) { st.w = prev.w; st.unit = prev.unit || itemDisplayUnit(it); st.kg = toKg(st.w, st.unit); }
       st.done = true;
     } else st.done = false;
   });
@@ -1568,6 +1605,7 @@ GYM POR CHAT: la pestaña Gym es solo lectura; la sesión la llevas tú.
 - Foto de una máquina que ya existe ("esta es la prensa") → link_equipment_photo. Máquina nueva → add_equipment con use_attached_photo.
 VIERNES: pregunta por la disponibilidad del finde y guárdala con set_availability.
 BALANCE: cuando le muestres cómo va el día, usa esta tabla (Ítem | Kcal), igual que la pantalla Hoy: 🔥 BMR, 🔥 Smartwatch (contador general), 🔥 ejercicios que el reloj no contó (solo si hay), **Total quemado**, cada comida con sus kcal, **Total consumido**, ✅ **Déficit actual**; debajo, la meta de hoy y la proteína.
+UNIDADES DE PESO: en muchas máquinas de placas Luis no sabe si el número es kg o lb. Nunca le preguntes la unidad: si dice solo un número en una máquina, anótalo con unit n (número de la máquina) y compara su progreso con ese mismo número. Solo usa kg o lb cuando él lo diga o sea peso libre (mancuernas, kettlebells, discos).
 REEMPLAZOS: si pide quitar o cambiar un ejercicio, usa primero uno de su biblioteca marcado RESERVA que trabaje el mismo músculo (ya tienen foto y guía), con swap_exercise y el campo to = su id. Solo crea uno nuevo si no hay ninguna reserva que sirva. Si el motivo es del lugar (no hay espacio, máquina ocupada, regla del gym), bloquéalo con block_exercise y ese motivo.
 EJERCICIOS EN LA TARJETA: todo ejercicio que le recomiendes durante una sesión (cambio o extra) va por swap_exercise (con el campo to si eliges uno concreto, aunque no esté en su biblioteca) o add_session_exercise. La tarjeta lo muestra y al tocarlo se abre "Cómo se hace". En el chat, una línea: qué cambió y por qué. Nunca escribas el ejercicio como texto con pasos ni pongas enlaces (nada de Google).
 NOMBRES CON DESCRIPCIÓN: Luis no conoce máquinas, agarres ni accesorios por su nombre. Cada vez que nombres una máquina, un banco, un agarre o un accesorio, pon entre paréntesis cómo se ve y cómo se usa, para que lo ubique sin buscar en Google. Ej.: "curl femoral acostado (la máquina donde te acuestas boca abajo y doblas las piernas hacia atrás, levantando un rodillo con los talones)", "cuerda (dos tiras gruesas de cuerda negra unidas al medio, se engancha a la polea)". Igual en ejercicios nuevos.
@@ -1609,16 +1647,16 @@ Responde SOLO un JSON: {"items":[{"name":"Pollo al wok con repollo","qty":"1 pla
 
 // ---------- Free-text sets ("hice 3 con 5 kg y la última con 12", "con 25 libras") ----------
 ACTIONS.parseSets = async i => {
-  const s = activeSession(); if (!s) return; const it = s.items[+i]; const text = val('ft-' + i).trim();
+  const s = activeSession(); if (!s) return; const it = s.items[+i]; const text = (val('sh-ft-' + i) || val('ft-' + i)).trim();
   if (!text) { toast('Escribe lo que hiciste.'); return; }
   ui.parseBusy = +i; render();
   try {
     const prompt = `Convierte lo que escribió Luis en series de gym. Ejercicio: ${it.name}. Plan: ${describeSets(it.planned.list || [])} (${it.planned.reps} reps por serie si no dice otra cosa). Unidad usada antes: ${itemDisplayUnit(it)}.
 Texto: "${text}"
-"libras"/"lb"/"lbs" = lb; "kilos"/"kg" = kg. Si no dice unidad, usa ${itemDisplayUnit(it)}. Si no dice reps, usa las del plan. Guarda el peso tal cual lo dijo (no conviertas).
+"libras"/"lb"/"lbs" = lb; "kilos"/"kg" = kg; "nivel", "placa", "pin", "número" o un número de máquina sin unidad = n. Si no dice unidad, usa ${itemDisplayUnit(it)}. Si no dice reps, usa las del plan. Guarda el peso tal cual lo dijo (no conviertas).
 Responde SOLO JSON: {"sets":[{"reps":10,"weight":5,"unit":"kg"}],"feel":null} (feel: "facil","bien","dificil","dolor" o null).`;
     const r = await ai.json(prompt, { tier: 'quick' });
-    const sets = (r && Array.isArray(r.sets) ? r.sets : []).map(x => { const unit = x.unit === 'lb' ? 'lb' : 'kg'; const w = num(x.weight); return { reps: num(x.reps) || it.planned.reps, w: w ?? '', unit, kg: w != null ? toKg(w, unit) : '', done: true }; }).slice(0, 12);
+    const sets = (r && Array.isArray(r.sets) ? r.sets : []).map(x => { const unit = parseUnit(x.unit, itemDisplayUnit(it)); const w = num(x.weight); return { reps: num(x.reps) || it.planned.reps, w: w ?? '', unit, kg: w != null ? toKg(w, unit) : '', done: true }; }).slice(0, 12);
     if (!sets.length) throw { code: 'invalid_json' };
     await writeSess(s.id, cur => { const t = cur.items[+i]; t.sets = sets; t.unit = sets[sets.length - 1].unit; if (r.feel && FEELS.some(f => f[0] === r.feel)) t.feel = r.feel; });
     toast('Anotado: ' + describeSets(sets));
@@ -1759,13 +1797,13 @@ const TOOL_SPECS = [
       await writeDoc('equipment/' + e.id, cur => cur ? { ...cur, photoId: pid, confirm: false } : null);
       toolNote('Foto de ' + e.name); return { ok: true, equipment: e.name };
     } },
-  { name: 'log_sets', description: 'Registra series de un ejercicio (peso con su unidad kg o lb, tal como lo dijo). Por defecto SUMA estas series a las que ya anotó hoy en ese ejercicio; replace true solo para corregir (reemplaza todas). Usa la sesión en curso de ese día o crea un registro libre. Devuelve la recomendación para la próxima vez.', inputSchema: { type: 'object', properties: { exercise: S_STR, replace: { type: 'boolean', description: 'true = corrige y reemplaza las series anotadas' }, sets: { type: 'array', items: { type: 'object', properties: { reps: S_NUM, weight: S_NUM, unit: { type: 'string', enum: ['kg', 'lb'] } }, required: ['reps'] } }, feel: { type: 'string', enum: ['facil', 'bien', 'dificil', 'dolor'] }, date: S_STR, pattern: { type: 'string', enum: Object.keys(PATTERNS) } }, required: ['exercise', 'sets'] },
+  { name: 'log_sets', description: 'Registra series de un ejercicio (peso con su unidad tal como lo dijo: kg, lb, o n = número de la máquina cuando no sabe si son kg o lb; si en una máquina de placas dice solo un número, es n). Por defecto SUMA estas series a las que ya anotó hoy en ese ejercicio; replace true solo para corregir (reemplaza todas). Usa la sesión en curso de ese día o crea un registro libre. Devuelve la recomendación para la próxima vez.', inputSchema: { type: 'object', properties: { exercise: S_STR, replace: { type: 'boolean', description: 'true = corrige y reemplaza las series anotadas' }, sets: { type: 'array', items: { type: 'object', properties: { reps: S_NUM, weight: S_NUM, unit: { type: 'string', enum: ['kg', 'lb'] } }, required: ['reps'] } }, feel: { type: 'string', enum: ['facil', 'bien', 'dificil', 'dolor'] }, date: S_STR, pattern: { type: 'string', enum: Object.keys(PATTERNS) } }, required: ['exercise', 'sets'] },
     execute: async (x) => {
       const date = dateArg(x.date);
       let ex = findEx(x.exercise);
       if (!ex) { const id = slug(x.exercise); await writeDoc('exercises/' + id, () => ({ name: String(x.exercise), equipmentIds: [], pattern: x.pattern || 'other', muscles: [], blocked: false, source: 'chat' })); ex = { id, ...cache.get('exercises/' + id) }; howQueue.push(id); }
       if (ex.blocked) throw new Error(`${ex.name} está bloqueado; pregúntale si quiere desbloquearlo`);
-      const sets = (x.sets || []).slice(0, 12).map(s => { const unit = s.unit === 'lb' ? 'lb' : 'kg', w = num(s.weight); return { reps: Math.max(0, Math.round(num(s.reps) || 0)), w: w != null && w >= 0 ? w : '', unit, kg: w != null && w >= 0 ? toKg(w, unit) : '', done: true }; }).filter(s => s.reps > 0);
+      const sets = (x.sets || []).slice(0, 12).map(s => { const unit = parseUnit(s.unit, 'kg'), w = num(s.weight); return { reps: Math.max(0, Math.round(num(s.reps) || 0)), w: w != null && w >= 0 ? w : '', unit, kg: w != null && w >= 0 ? toKg(w, unit) : '', done: true }; }).filter(s => s.reps > 0);
       if (!sets.length) throw new Error('faltan las reps');
       let saved = null;
       const act = sessionsArr().filter(s => s.date === date && s.status === 'active').slice(-1)[0];
@@ -1931,6 +1969,7 @@ async function sendChat() {
   const ta = document.getElementById('chatIn'); if (ta) c.draft = ta.value;
   const text = (c.draft || '').trim(), imgs = c.imgs;
   if ((!text && !imgs.length) || c.busy) return;
+  if (!imgs.length && /^(la |mi )?(lista|rutina)( de hoy)?[.!?]*$/i.test(norm(text))) { c.draft = ''; if (ta) ta.value = ''; if (todaySession()) ACTIONS.openRoutine(); else toast('Hoy todavía no hay rutina. Escríbeme cuando llegues al gym.'); return; }
   const d = today();
   c.viewDate = null; c.showDays = false; c.showAllMsgs = false; chatStick = true;
   c.lastImgs = imgs; c.imgs = []; c.draft = '';
@@ -2111,6 +2150,10 @@ document.addEventListener('keydown', ev => { if (ev.target && ev.target.id === '
 
 // ---------- Settings sheet ----------
 function viewSheet(kind) {
+  if (kind === 'routine') {
+    const s = todaySession(); if (!s) return '';
+    return `<div class="sheet" data-act="sheetBg"><div class="panel" role="dialog" aria-modal="true" aria-labelledby="h-rt"><div class="row sp nw"><h2 id="h-rt" class="grow" style="margin:0">Tu rutina de hoy</h2><button class="iconbtn" data-act="closeSheet" aria-label="Cerrar">×</button></div><p class="tiny muted" style="margin:4px 0 8px">Toca un ejercicio para ver cómo se hace, anotar tus series o cambiarlo. Toca el cuadrito para marcarlo hecho.</p>${routineCard(s)}</div></div>`;
+  }
   if (kind && kind.startsWith('opener:')) {
     const sx = cache.get('sessions/' + kind.slice(7)); if (!sx || !sx.opener) return '';
     return `<div class="sheet" data-act="sheetBg"><div class="panel" role="dialog" aria-modal="true" aria-labelledby="h-op"><div class="row sp nw"><span class="grow"></span><button class="iconbtn" data-act="closeSheet" aria-label="Cerrar">×</button></div>${viewOpener({ id: kind.slice(7), ...sx })}</div></div>`;
@@ -2118,7 +2161,8 @@ function viewSheet(kind) {
   if (kind && kind.startsWith('howto:')) {
     const id = kind.slice(6), e = cache.get('exercises/' + id); const ex = e ? { id, ...e } : { id, name: id, pattern: 'other' };
     const s = todaySession(), it = s && (s.items || []).find(x => x.exId === id) || { pattern: ex.pattern };
-    return `<div class="sheet" data-act="sheetBg"><div class="panel" role="dialog" aria-modal="true" aria-labelledby="h-how"><div class="row sp nw"><h2 id="h-how" class="grow" style="margin:0">${esc(ex.name)}</h2><button class="iconbtn" data-act="closeSheet" aria-label="Cerrar">×</button></div>${it.planned ? `<p class="small ink2">Plan: ${esc(planText(it))}</p>` : ''}${howToBlock(ex, it, s, true)}${swapBlock(s, id)}</div></div>`;
+    const liveIdx = s && s.status === 'active' ? (s.items || []).findIndex(x => x.exId === id) : -1;
+    return `<div class="sheet" data-act="sheetBg"><div class="panel" role="dialog" aria-modal="true" aria-labelledby="h-how"><div class="row sp nw"><h2 id="h-how" class="grow" style="margin:0">${esc(ex.name)}</h2><button class="iconbtn" data-act="closeSheet" aria-label="Cerrar">×</button></div>${it.planned && liveIdx < 0 ? `<p class="small ink2">Plan: ${esc(planText(it))}</p>` : ''}${liveIdx >= 0 ? viewItem(s, s.items[liveIdx], liveIdx, true) + `<button class="ghost full" style="margin-top:8px" data-act="openRoutine">‹ Volver a la lista</button>` : howToBlock(ex, it, s, true)}</div></div>`;
   }
   return viewSettings();
 }
