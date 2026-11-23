@@ -192,3 +192,10 @@ body.kb .app{padding-bottom:12px}
 .expics figure{margin:0}
 .expics img{width:100%;height:auto;border-radius:10px;display:block}
 .expics figcaption{text-align:center;margin-top:2px}
+.hiit-timer{text-align:center;background:var(--surface2);border-radius:14px;padding:10px 8px;margin:6px 0}
+.hiit-move{font-weight:700;font-size:18px;margin:2px 0}
+.hiit-left{font-family:"Barlow Semi Condensed",sans-serif;font-size:56px;line-height:1;font-weight:700}
+.hiit-left.work{color:var(--accent)}
+.hiit-left.rest{color:var(--muted)}
+.hiit-ex{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
+.hiit-ex .expics img{width:100%;height:auto;border-radius:10px;display:block}

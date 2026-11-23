@@ -841,7 +841,7 @@ function startSessionFrom(o) {
   if (!p.items.length && !p.finisher && !p.cardio) return p;
   const n = sessionsArr().filter(s => s.date === d).length;
   const id = d + '-' + 'abcdefghij'[Math.min(9, n)];
-  writeDoc('sessions/' + id, () => ({ date: d, template: p.template, location: p.location, title: p.title, format: p.format, formatLabel: p.formatLabel, goal: p.goal, focus: p.focus, timeMin: p.timeMin, energy: p.energy, status: 'active', items: p.items, cardio: p.cardio, finisher: p.finisher, warnings: p.warnings, surprise: !!o.surprise, watchStart: o.watchStart ?? null, startedAt: new Date().toISOString() }));
+  writeDoc('sessions/' + id, () => ({ date: d, template: p.template, location: p.location, title: p.title, format: p.format, formatLabel: p.formatLabel, goal: p.goal, focus: p.focus, timeMin: p.timeMin, energy: p.energy, status: 'active', items: p.items, cardio: p.cardio, finisher: p.finisher, opener: p.opener || null, warnings: p.warnings, surprise: !!o.surprise, watchStart: o.watchStart ?? null, startedAt: new Date().toISOString() }));
   p.id = id;
   const missing = p.items.map(i => i.exId).filter(x => { const e = cache.get('exercises/' + x); return e && !e.howto; });
   if (missing.length && aiOn()) generateHowTo(missing);
@@ -858,6 +858,7 @@ function routineCard(s, compact) {
   const k = sessionKcal(s, bodyKg(), cfg('rules'), exById());
   let h = `<div class="routine"><div class="row sp nw"><b class="grow">${esc(s.title)}</b><span class="pill ${s.status === 'done' ? 'ok' : 'warn'}">${s.status === 'done' ? 'terminada' : 'en curso'}</span></div>`;
   h += `<p class="tiny muted" style="margin:2px 0 6px">${esc(s.formatLabel || 'series normales')} · ${s.timeMin || '—'} min${s.watchStart != null ? ' · reloj al empezar ' + fmt(s.watchStart) : ''}</p><ol class="rlist">`;
+  if (s.opener) h += `<li class="${s.opener.done ? 'done' : ''}"><span class="rcheck" aria-hidden="true">${s.opener.done ? '✓' : ''}</span><span class="grow"><b>${esc(s.opener.name)}</b><span class="tiny muted" style="display:block">${esc(openerLine(s.opener))}</span></span></li>`;
   for (const it of s.items || []) {
     const doneN = (it.sets || []).filter(x => x.done || num(x.reps) > 0).length, total = Math.max((it.sets || []).length, (it.planned || {}).sets || 0);
     const done = total && doneN >= total;
@@ -927,6 +928,7 @@ function viewPreSession() {
     h += `<div class="empty"><div class="big">Aún no conozco equipo para esta sesión</div><p class="small ink2">Solo armo sesiones con lo que hay en tu gym. Mándame fotos de las máquinas por el chat o agrégalas abajo.</p><div class="row" style="justify-content:center"><button class="primary" data-act="eqViaChat">Agregar por el chat</button><button data-act="toggleEqForm">Formulario</button></div></div>`;
   } else {
     h += `<div style="margin-top:12px"><h3>${esc(p.title)} · ~${p.estMin} min</h3><p class="tiny muted" style="margin:0">Formato: ${esc(p.formatLabel)}</p><ol class="small" style="padding-left:20px;margin:4px 0">`;
+    if (p.opener) h += `<li><b>${esc(p.opener.name)}</b> <span class="muted">${esc(openerLine(p.opener))}</span></li>`;
     h += p.items.map(it => `<li><b>${esc(it.name)}</b>${it.anchor ? ' <span class="pill ok">ancla</span>' : ''}${it.isNew ? ' <span class="pill warn">nuevo</span>' : ''} <span class="muted">${it.planned.list[0].w || it.planned.list[0].kg ? esc(describeSets(it.planned.list)) : it.planned.sets + '×' + it.planned.reps}${it.group ? ' · ' + esc(it.group) : ''}</span></li>`).join('');
     if (p.cardio) h += `<li><b>Intervalos en cinta</b> <span class="muted">${esc(p.cardio.text)}</span></li>`;
     if (p.finisher) h += `<li><b>Final: ${esc(p.finisher.name)}</b> <span class="muted">${esc(p.finisher.desc)}</span></li>`;
@@ -951,6 +953,7 @@ function viewSession(s) {
     <p class="small ink2" style="margin:0">${s.timeMin} min · ${esc(s.formatLabel || 'series normales')} · energía ${esc(s.energy)} · ~<b class="num">${fmt(k.gross)}</b> kcal (${fmt(k.extra)} extra al reloj)</p>`;
   for (const w of s.warnings || []) h += `<p class="small warn" style="margin:6px 0 0">${esc(w)}</p>`;
   h += `</section>`;
+  if (s.opener) h += viewOpener(s);
   (s.items || []).forEach((it, i) => { h += viewItem(s, it, i); });
   if (s.cardio) h += viewCardio(s);
   if (s.finisher) h += viewFinisher(s);
@@ -1011,6 +1014,64 @@ function viewItem(s, it, i) {
   }
   return h + `</section>`;
 }
+// ---------- HIIT opener (before the weights) + interval timer ----------
+function openerLine(o) { return `${o.rounds} ${o.rounds > 1 ? 'rondas' : 'ronda'} · ${o.work} s trabajo / ${o.rest} s descanso${o.rounds > 1 ? ` · ${o.roundRest} s entre rondas` : ''} · ~${o.minutes} min`; }
+function viewOpener(s) {
+  const o = s.opener, t = ui.hiit;
+  let h = `<section class="card" aria-labelledby="h-op"><div class="row sp"><h3 id="h-op" style="margin:0">${esc(o.name)}</h3><span class="pill warn">antes de las pesas</span></div>
+  <p class="small ink2" style="margin:4px 0">${esc(openerLine(o))}</p><p class="tiny muted" style="margin:0 0 6px">${esc(o.note || '')}</p>`;
+  h += `<div class="hiit-timer" aria-live="polite">${(v => `<div id="hiit-phase" class="small ink2">${esc(v.phase)}</div><div id="hiit-move" class="hiit-move">${esc(v.move)}</div><div id="hiit-left" class="hiit-left num ${v.kind}">${v.left}</div>`)(hiitView(t, o))}</div>`;
+  h += `<div class="row" style="margin:6px 0 10px">${t ? `<button class="grow" data-act="hiitPause">${t.paused ? 'Seguir' : 'Pausa'}</button><button class="ghost" data-act="hiitStop">Parar</button>` : `<button class="primary grow" data-act="hiitStart">Iniciar timer</button>`}</div>`;
+  h += o.moves.map((m, k) => `<div class="hiit-ex"><div class="small"><b>${k + 1}. ${esc(m.name)}</b> <span class="tiny muted">${esc(m.cue)}</span></div><div class="expics">${(m.photos || []).map(u => `<img src="${esc(u)}" alt="${esc(m.name)}" loading="lazy">`).join('')}</div></div>`).join('');
+  h += `<button class="chk ${o.done ? 'done' : ''}" style="width:auto;padding:0 14px;margin-top:8px" data-act="openerDone" aria-pressed="${!!o.done}">${o.done ? '✓ Hecho' : 'Marcar hecho'}</button></section>`;
+  return h;
+}
+ACTIONS.openerDone = () => writeSess(curSessId(), s => { if (!s.opener) return false; s.opener.done = !s.opener.done; });
+// Timeline: [work move1, rest, work move2, rest, ..., round rest, ...]; ticks once per second and only touches the timer DOM.
+function hiitSteps(o) {
+  const st = [];
+  for (let r = 0; r < o.rounds; r++) o.moves.forEach((m, k) => {
+    st.push({ kind: 'work', name: m.name, sec: o.work, round: r + 1 });
+    const last = k === o.moves.length - 1;
+    if (!last) st.push({ kind: 'rest', name: 'Sigue: ' + o.moves[k + 1].name, sec: o.rest, round: r + 1 });
+    else if (r < o.rounds - 1) st.push({ kind: 'rest', name: 'Descanso entre rondas · sigue: ' + o.moves[0].name, sec: o.roundRest, round: r + 1 });
+  });
+  return st;
+}
+let hiitTick = null, hiitAudio = null, hiitLock = null;
+function hiitBeep(f, ms) { try { hiitAudio = hiitAudio || new (window.AudioContext || window.webkitAudioContext)(); const o = hiitAudio.createOscillator(), g = hiitAudio.createGain(); o.frequency.value = f; o.connect(g); g.connect(hiitAudio.destination); g.gain.value = 0.25; o.start(); o.stop(hiitAudio.currentTime + ms / 1000); } catch (_) {} if (navigator.vibrate) navigator.vibrate(ms); }
+function hiitView(t, o) {
+  if (!t) return { phase: 'Listo para empezar', move: o.moves[0].name, left: o.work, kind: '' };
+  const st = t.steps[t.i];
+  return { phase: (st.kind === 'work' ? '¡Dale!' : 'Descanso') + ` · ronda ${st.round}/${t.rounds}` + (t.paused ? ' · en pausa' : ''), move: st.name, left: t.left, kind: st.kind };
+}
+function hiitPaint() {
+  const t = ui.hiit; if (!t) return; const v = hiitView(t), $ = id => document.getElementById(id);
+  if ($('hiit-phase')) $('hiit-phase').textContent = v.phase;
+  if ($('hiit-move')) $('hiit-move').textContent = v.move;
+  if ($('hiit-left')) { $('hiit-left').textContent = v.left; $('hiit-left').className = 'hiit-left num ' + v.kind; }
+}
+function hiitEnd(done) {
+  clearInterval(hiitTick); hiitTick = null; ui.hiit = null; if (hiitLock) { hiitLock.release().catch(() => {}); hiitLock = null; }
+  if (done) { hiitBeep(1200, 600); writeSess(curSessId(), s => { if (!s.opener) return false; s.opener.done = true; }); toast('Arranque hecho. Ahora sí, a las pesas.'); }
+  render();
+}
+ACTIONS.hiitStart = () => {
+  const s = activeSession(); if (!s || !s.opener) return;
+  const steps = hiitSteps(s.opener);
+  ui.hiit = { steps, i: 0, left: steps[0].sec, rounds: s.opener.rounds, paused: false };
+  if (navigator.wakeLock) navigator.wakeLock.request('screen').then(l => { hiitLock = l; }).catch(() => {});
+  hiitBeep(880, 250); render(); hiitPaint();
+  hiitTick = setInterval(() => {
+    const t = ui.hiit; if (!t || t.paused) return;
+    t.left--;
+    if (t.left > 0 && t.left <= 3) hiitBeep(660, 120);
+    if (t.left <= 0) { t.i++; if (t.i >= t.steps.length) return hiitEnd(true); t.left = t.steps[t.i].sec; hiitBeep(t.steps[t.i].kind === 'work' ? 880 : 440, 300); }
+    hiitPaint();
+  }, 1000);
+};
+ACTIONS.hiitPause = () => { if (!ui.hiit) return; ui.hiit.paused = !ui.hiit.paused; render(); hiitPaint(); };
+ACTIONS.hiitStop = () => hiitEnd(false);
 function viewFinisher(s) {
   const f = s.finisher;
   return `<section class="card" aria-labelledby="h-fin"><div class="row sp"><h3 id="h-fin" style="margin:0">Final: ${esc(f.name)}</h3><span class="pill warn">${esc(f.kind)} · ${f.minutes} min</span></div><p class="small" style="margin:6px 0">${esc(f.desc)}</p>
@@ -1595,7 +1656,7 @@ const TOOL_SPECS = [
       } else if (num(x.watch_kcal) != null && s.watchStart == null) await writeSess(s.id, c => { c.watchStart = num(x.watch_kcal); });
       if (!s) throw new Error('no se pudo crear la sesión');
       chatCard(s.id); toolNote('Rutina de hoy lista');
-      return { id: s.id, title: s.title, format: s.formatLabel, exercises: (s.items || []).map(i => `${i.name}: ${planText(i)}${i.group ? ' (' + i.group + ')' : ''}`), cardio: s.cardio ? s.cardio.text : null, finisher: s.finisher ? s.finisher.name + ': ' + s.finisher.desc : null, watch_start: s.watchStart ?? null };
+      return { id: s.id, title: s.title, format: s.formatLabel, exercises: (s.items || []).map(i => `${i.name}: ${planText(i)}${i.group ? ' (' + i.group + ')' : ''}`), cardio: s.cardio ? s.cardio.text : null, opener: s.opener ? (o => o.name + ': ' + o.rounds + ' ronda(s) de ' + o.moves.map(m => m.name).join(', ') + ' (' + o.work + ' s / ' + o.rest + ' s)')(s.opener) : null, finisher: s.finisher ? s.finisher.name + ': ' + s.finisher.desc : null, watch_start: s.watchStart ?? null };
     } },
   { name: 'set_session_watch', description: 'Guarda la lectura del contador general del reloj al empezar (phase start) o al terminar (phase end) la sesión de gym de hoy.', inputSchema: { type: 'object', properties: { phase: { type: 'string', enum: ['start', 'end'] }, kcal: S_NUM }, required: ['phase', 'kcal'] },
     execute: async (x) => { const s = todaySession(); if (!s) throw new Error('no hay sesión hoy; usa start_session'); const k = num(x.kcal); if (k == null) throw new Error('kcal inválidas'); await writeSess(s.id, c => { c[x.phase === 'end' ? 'watchEnd' : 'watchStart'] = k; }); toolNote(`Reloj ${x.phase === 'end' ? 'al terminar' : 'al empezar'}: ${k}`); const kk = sessionKcal(cache.get('sessions/' + s.id), bodyKg(), cfg('rules'), exById()); return { ok: true, estimate: kk.estimate, watch_delta: kk.watchDelta, extra: kk.extra }; } },
@@ -1790,7 +1851,7 @@ const TOOL_SPECS = [
       await (wq['sessions/' + p.id] || Promise.resolve());
       { const s2 = activeSession(); if (s2) chatCard(s2.id); }
       toolNote('Sesión sorpresa lista');
-      return { title: p.title, format: p.formatLabel, exercises: p.items.map(i => i.name + (i.group ? ' (' + i.group + ')' : '')), finisher: p.finisher ? p.finisher.name + ': ' + p.finisher.desc : null, cardio: p.cardio ? p.cardio.text : null, est_min: p.estMin };
+      return { title: p.title, format: p.formatLabel, exercises: p.items.map(i => i.name + (i.group ? ' (' + i.group + ')' : '')), opener: p.opener ? (o => o.name + ': ' + o.rounds + ' ronda(s) de ' + o.moves.map(m => m.name).join(', ') + ' (' + o.work + ' s / ' + o.rest + ' s)')(p.opener) : null, finisher: p.finisher ? p.finisher.name + ': ' + p.finisher.desc : null, cardio: p.cardio ? p.cardio.text : null, est_min: p.estMin };
     } }
 ];
 const TOOL_DEFS = TOOL_SPECS.map(t => ({ name: t.name, description: t.description, input_schema: t.inputSchema }));

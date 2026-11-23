@@ -150,6 +150,7 @@ function sessionKcal(sess, bodyKg, rules = DEFAULT_RULES, exById = {}) {
     est += strengthKcal(it.sets, bodyKg, rules, { vigorous: !!(ex.vigorous || it.vigorous), pushups: /flexi|push.?up/i.test(it.name || '') }).gross;
   }
   if (sess.finisher && sess.finisher.done) est += (sess.finisher.met || 8) * bodyKg * (num(sess.finisher.minutes) || 6) / 60;
+  if (sess.opener && sess.opener.done) est += (sess.opener.met || 8) * bodyKg * (num(sess.opener.minutes) || 8) / 60;
   if (sess.cardio && (sess.cardio.done || sess.cardio.completed != null)) {
     const k = activityKcal({ type: 'runwalk', treadmill: true, ...sess.cardio }, bodyKg, rules);
     cardioGross += k.gross; cardioExtra += k.extra; if (k.watchCounted) cardioWatched += k.gross;
@@ -325,6 +326,33 @@ const FINISHERS = [
   { id: 'emom-mb-throw', name: 'EMOM 6: lanzamientos rotacionales', kind: 'EMOM', minutes: 6, needs: ['medicine-balls'], desc: 'Cada minuto: 6 lanzamientos por lado contra la pared, girando desde la cadera (patada fuerte).', met: 7 }
 ];
 
+// HIIT opener before every gym session (from two reels Luis sent): bodyweight moves, 30 s work / 15 s rest.
+const img2 = id => ['img/ex/' + id + '-0.jpg', 'img/ex/' + id + '-1.jpg'];
+const HIIT_MOVES = {
+  jacks: { name: 'Jumping jacks', cue: 'Brazos y piernas afuera y adentro, ritmo constante.', photos: img2('Star_Jump') },
+  rope: { name: 'Saltos de cuerda', cue: 'Saltos cortos en la punta de los pies. Sin cuerda: imita el gesto.', photos: img2('Rope_Jumping'), needs: 'jump-rope' },
+  skip: { name: 'Skipping (rodillas altas)', cue: 'Rodillas a la cadera, brazos activos, rápido.', photos: img2('Fast_Skipping') },
+  climbers: { name: 'Escaladores', cue: 'Manos bajo los hombros, cadera baja, rodillas al pecho alternando.', photos: img2('Mountain_Climbers') },
+  lunge: { name: 'Zancada atrás alterna (sin peso)', cue: 'Paso largo atrás, rodilla casi al suelo, sube empujando con el talón de adelante.', photos: img2('Dumbbell_Rear_Lunge') },
+  squatTouch: { name: 'Sentadilla tocando el suelo', cue: 'Baja hasta tocar el suelo con las manos, pecho alto, sube rápido.', photos: img2('Bodyweight_Squat') },
+  kicks: { name: 'Talones al glúteo', cue: 'Trota en el sitio llevando los talones atrás.', photos: img2('Single_Leg_Butt_Kick') },
+  lateral: { name: 'Saltos laterales (patinador)', cue: 'Salta de un pie al otro hacia los lados, aterriza suave.', photos: img2('Lateral_Bound') }
+};
+const OPENERS = [
+  { id: 'hiit-aguante', name: 'Arranque HIIT · Aguante', moves: ['jacks', 'rope', 'skip', 'climbers', 'lunge'] },
+  { id: 'hiit-quemagrasa', name: 'Arranque HIIT · Quemagrasa', moves: ['jacks', 'squatTouch', 'climbers', 'skip', 'kicks', 'lateral'] }
+];
+// One opener per gym session, alternating. 2 rounds (1 if tired or football tomorrow).
+function buildOpener({ eqIds, energy, tomorrowFootball, sessions, heavyLegs }) {
+  const n = (sessions || []).filter(s => s.status === 'done' && s.location !== 'casa').length;
+  const o = OPENERS[n % OPENERS.length];
+  const moves = o.moves.map(k => HIIT_MOVES[k]).filter(m => !m.needs || eqIds.has(m.needs)).map(m => ({ name: m.name, cue: m.cue, photos: m.photos }));
+  const rounds = energy === 'cansado' || tomorrowFootball ? 1 : 2, work = 30, rest = 15, roundRest = 60;
+  const minutes = Math.round((moves.length * (work + rest) * rounds + roundRest * (rounds - 1)) / 60);
+  const note = heavyLegs ? 'Día de piernas: ve al 7 de 10, que el hip thrust es lo importante hoy.' : 'Al 8 de 10: que te falte el aire, pero sin perder la técnica.';
+  return { id: o.id, name: o.name, moves, rounds, work, rest, roundRest, minutes, met: 8, note, watchCounted: true, done: false };
+}
+
 function lastLogFor(exId, sessions, beforeDate) {
   const sorted = sessions.filter(s => s.status !== 'discarded' && (!beforeDate || s.date < beforeDate)).sort((a, b) => (a.date + (a.id || '') < b.date + (b.id || '') ? 1 : -1));
   for (const s of sorted) for (const it of s.items || []) if (it.exId === exId && (it.sets || []).some(x => num(x.reps) > 0)) return { ...it, date: s.date };
@@ -396,6 +424,8 @@ function buildSession(args) {
     cardio = { type: 'elliptical', runMin: 1, walkMin: 1, rounds, text: `${rounds} × (1 min fuerte + 1 min suave) en elíptica`, why: 'Intervalos sin impacto.', watchCounted: true };
     cardioMin = rounds * 2;
   } else if (T.intervals && !home) warnings.push('Sin cinta ni elíptica disponibles: los intervalos quedan fuera.');
+  const opener = home ? null : buildOpener({ eqIds, energy, tomorrowFootball: args.tomorrowFootball, sessions: args.sessions, heavyLegs: !!T.heavyLegs });
+  if (opener) cardioMin += opener.minutes;
   const finOpts = FINISHERS.filter(f => f.needs.every(n => eqIds.has(n)) && !(args.tomorrowFootball && f.met >= 9));
   if (!home && finOpts.length && timeMin - cardioMin >= 40 && energy !== 'cansado') {
     const f = finOpts[(wk + tKey.charCodeAt(0)) % finOpts.length];
@@ -498,7 +528,7 @@ function buildSession(args) {
   }
   if (tKey === 'A' && energy === 'cansado') warnings.push('Cansado: saltos al final y solo si te sientes rápido.');
   const base = home ? 'En casa · ' + T.title.split('· ')[1] : T.title;
-  return { template: tKey, location: home ? 'casa' : 'gym', title: (args.surprise ? 'Sorpresa · ' : '') + base, format, formatLabel: FORMATS[format], goal: T.goal, focus: T.focus, timeMin, energy, items, cardio, finisher, warnings, estMin: r0(est) };
+  return { template: tKey, location: home ? 'casa' : 'gym', title: (args.surprise ? 'Sorpresa · ' : '') + base, format, formatLabel: FORMATS[format], goal: T.goal, focus: T.focus, timeMin, energy, items, cardio, finisher, opener, warnings, estMin: r0(est) };
 }
 
 // ---------- Indoor movement options (winter) ----------
@@ -933,4 +963,4 @@ function chatTurns(messages, max = 10) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { similarExercise, similarExercises, sessionBackups, metricStatus, lighter, weekendRebound, pantryKey, applyPantry, chatMsgId, chatMsgPath, chatTurns, TEMPLATES, canonicalActivity, blockedEquipmentIds, goalPaused, ACTIVITIES, pickFlexActivity, activeBlockedActivities, goalProgress, nextGoalProposal, streaks, movementOptions, pickMovement, FINISHERS, weekIndex, toKg, kgOf, tzNow, addDays, daysBetween, weekStart, dowIndex, strengthKcal, activityKcal, footballStats, sessionKcal, dayBalance, nextStrength, nextRunWalk, describeSets, buildSession, weightSeries, rolling7, learnMealTimes, weekStats, computeNudges, prsFrom, goalsFrom, DEFAULT_RULES, mealSlot };
+if (typeof module !== 'undefined') module.exports = { buildOpener, OPENERS, HIIT_MOVES, similarExercise, similarExercises, sessionBackups, metricStatus, lighter, weekendRebound, pantryKey, applyPantry, chatMsgId, chatMsgPath, chatTurns, TEMPLATES, canonicalActivity, blockedEquipmentIds, goalPaused, ACTIVITIES, pickFlexActivity, activeBlockedActivities, goalProgress, nextGoalProposal, streaks, movementOptions, pickMovement, FINISHERS, weekIndex, toKg, kgOf, tzNow, addDays, daysBetween, weekStart, dowIndex, strengthKcal, activityKcal, footballStats, sessionKcal, dayBalance, nextStrength, nextRunWalk, describeSets, buildSession, weightSeries, rolling7, learnMealTimes, weekStats, computeNudges, prsFrom, goalsFrom, DEFAULT_RULES, mealSlot };
